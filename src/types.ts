@@ -1,18 +1,21 @@
-export type Area = 
-  'Ασπροβάλτα' | 'Σταυρός' | 'Νέα Βρασνά' | 'Νέα Μάδυτος' | 
-  'Ανοιξιά' | 'Απολλωνία' | 'Αρέθουσα' | 'Βαμβακιά' | 'Βρασνά' | 
-  'Κοκκαλού' | 'Λίμνη' | 'Μαυρούδα' | 'Μεγάλη Βόλβη' | 'Μικρή Βόλβη' | 
-  'Μόδι' | 'Παραλία Βρασνών' | 'Ρεντίνα' | 'Σκεπαστό';
+export type Area = string;
 export type Status = 'Τετελεσμένη' | 'Απόπειρα';
 export type Rank = 'Αστυνόμος Β΄' | 'Υπαστυνόμος Α΄' | 'Υπαστυνόμος Β΄' | 'Ανθυπαστυνόμος' | 'Αρχιφύλακας' | 'Αστυφύλακας';
-export type TheftType = 'Οικία (Κύρια)' | 'Οικία (Εξοχική)' | 'Επιχείρηση' | 'Από όχημα' | 'Κλοπή Αυτοκινήτου';
+export type TheftType = 'Οικίας' | 'Επιχείρησης' | 'Κλοπή από όχημα' | 'Κλοπή οχήματος';
 export type StolenItem = 'Ηλεκτρονικά' | 'Κοσμήματα' | 'Μετρητά' | 'Εργαλεία' | 'Άλλο';
 export type SuspectStatus = 'Άγνωστοι' | 'Γνωστοί';
-export type ModusOperandi = 'Ανασφάλιστο' | 'Θραύση υαλοπίνακα' | 'Παραβίαση κλειδαριάς' | 'Διάρρηξη παραθύρου/μπαλκονόπορτας' | 'Χωρίς ίχνη' | 'Άλλο';
+export type ModusOperandi = string;
 
 export interface Location {
   lat: number;
   lng: number;
+}
+
+export interface EditHistoryEntry {
+  updatedAt: any;
+  updatedBy: string;
+  updatedByName?: string;
+  updatedByRank?: string;
 }
 
 export interface Incident {
@@ -26,10 +29,8 @@ export interface Incident {
   location: Location;
   status: Status;
   theftType: TheftType;
-  modusOperandi: ModusOperandi | string;
-  usedTools: boolean;
-  usedToolTypes?: string[];
-  toolsDescription: string;
+  modusOperandi?: ModusOperandi;
+  carCategory?: string; // e.g. Ι.Χ.Ε., ΔΙΚΥΚΛΟ, etc.
   stolenItems: StolenItem[];
   suspectDetails: SuspectStatus;
   suspectNames?: string;
@@ -54,7 +55,11 @@ export interface Incident {
   updatedByName?: string;
   updatedByRank?: string;
   updatedAt?: any; // Firestore Timestamp
+  editHistory?: EditHistoryEntry[];
+  isTimeRange?: boolean;
   incidentDate?: string;
+  incidentDateFrom?: string;
+  incidentDateTo?: string;
 }
 
 export interface UserProfile {
@@ -62,6 +67,8 @@ export interface UserProfile {
   rank: Rank;
   lastName: string;
   firstName: string;
+  email?: string;
+  isApproved?: boolean;
   notificationPrefs?: {
     enabled: boolean;
     quietHours?: {

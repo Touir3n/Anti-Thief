@@ -5,9 +5,9 @@
 
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot, orderBy, Timestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from './firebase';
-import { Shield, List, Map as MapIcon, Plus, LogOut, Search, Filter, Bell, Settings } from 'lucide-react';
+import { List, Map as MapIcon, Plus, LogOut, Search, Filter, Bell, Settings, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast, Toaster } from 'react-hot-toast';
 import IncidentList from './components/IncidentList';
@@ -15,6 +15,8 @@ import IncidentForm from './components/IncidentForm';
 import IncidentMap from './components/IncidentMap';
 import OfficerProfileForm from './components/OfficerProfileForm';
 import SettingsModal from './components/SettingsModal';
+import UsersModal from './components/UsersModal';
+import AppLogo from './components/AppLogo';
 import { toUpperCaseAccentFree } from './lib/Typography';
 import { UserProfile, Incident } from './types';
 
@@ -23,9 +25,15 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  
+  // Global incidents state to prevent quota exhaustion from tab switching
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(true);
+  
   const [view, setView] = useState<'list' | 'map' | 'form'>('list');
   const [editingIncident, setEditingIncident] = useState<any>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showUsersModal, setShowUsersModal] = useState(false);
 
   const handleOpenIncident = async (id: string) => {
     try {
@@ -65,8 +73,33 @@ export default function App() {
       }
       setLoading(false);
     });
-    return unsubscribe;
+    
+    return () => {
+      unsubscribe();
+    };
   }, []);
+
+  // Centralized incidents listener
+  useEffect(() => {
+    if (!userProfile || userProfile.isApproved === false) return;
+    
+    const q = query(
+      collection(db, 'incidents'),
+      orderBy('recordedAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Incident));
+      setIncidents(data);
+      setIncidentsLoading(false);
+    }, (error) => {
+      console.error("Σφάλμα συγχρονισμού λίστας συμβάντων:", error);
+      toast.error("Σφάλμα σύνδεσης. Ενδέχεται να εμφανίζονται παλιά δεδομένα.");
+      setIncidentsLoading(false);
+    });
+
+    return unsubscribe;
+  }, [userProfile]);
 
   useEffect(() => {
     if (!userProfile || !userProfile.notificationPrefs?.enabled) return;
@@ -164,7 +197,7 @@ export default function App() {
           className="w-full max-w-md bg-white p-10 rounded-[32px] shadow-2xl text-center text-slate-800"
         >
           <div className="bg-[#1A237E]/10 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-8">
-            <Shield className="text-[#1A237E] w-10 h-10" />
+            <AppLogo className="w-12 h-12" variant="colored" />
           </div>
           <h1 className="text-4xl font-black mb-2 tracking-tight uppercase leading-none">
             ANTI-THIEF
@@ -190,8 +223,8 @@ export default function App() {
       <header className="bg-[#1A237E] text-white p-4 sm:p-8 sticky top-0 z-50 shadow-lg">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-            <div className="bg-white/20 p-2 sm:p-3 rounded-xl shrink-0">
-              <Shield className="text-white w-6 h-6 sm:w-7 sm:h-7" />
+            <div className="bg-white/10 p-2.5 sm:p-3 rounded-xl shrink-0 backdrop-blur-sm shadow-inner shadow-white/10">
+              <AppLogo className="w-6 h-6 sm:w-8 sm:h-8" variant="light" />
             </div>
             <div className="flex flex-col min-w-0 justify-center">
               <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-none truncate mt-1">
@@ -211,16 +244,25 @@ export default function App() {
               <span className="text-[10px] text-white/40 uppercase font-black">{toUpperCaseAccentFree('ΧΡΗΣΤΗΣ ΣΥΣΤΗΜΑΤΟΣ')}</span>
             </div>
             {userProfile && (
-              <button 
-                onClick={() => setShowSettings(true)}
-                className="relative p-2 sm:p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10"
-                title="Ρυθμίσεις Ειδοποιήσεων"
-              >
-                <Bell className="w-5 h-5" />
-                {userProfile.notificationPrefs?.enabled && (
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#D4AF37] rounded-full animate-pulse border-2 border-[#1A237E]" />
-                )}
-              </button>
+              <>
+                <button 
+                  onClick={() => setShowUsersModal(true)}
+                  className="p-2 sm:p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10"
+                  title="Χρήστες & Πρόσβαση"
+                >
+                  <Users className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={() => setShowSettings(true)}
+                  className="relative p-2 sm:p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10"
+                  title="Ρυθμίσεις Ειδοποιήσεων"
+                >
+                  <Bell className="w-5 h-5" />
+                  {userProfile.notificationPrefs?.enabled && (
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#D4AF37] rounded-full animate-pulse border-2 border-[#1A237E]" />
+                  )}
+                </button>
+              </>
             )}
             <button 
               onClick={handleLogout}
@@ -239,6 +281,18 @@ export default function App() {
           {!userProfile && user && (
             <OfficerProfileForm onComplete={setUserProfile} />
           )}
+          {userProfile && userProfile.isApproved === false && (
+            <div className="flex-1 flex items-center justify-center">
+               <div className="bg-amber-50 border border-amber-200 text-amber-800 p-8 rounded-3xl max-w-md text-center shadow-sm">
+                 <AppLogo className="w-16 h-16 mx-auto mb-4 text-amber-500" variant="default" />
+                 <h2 className="text-xl font-bold mb-2">Ο λογαριασμός σας τελεί σε αναμονή έγκρισης</h2>
+                 <p className="text-sm">Παρακαλούμε επικοινωνήστε με τον διαχειριστή του συστήματος για να σας δοθεί δικαίωμα εξουσιοδοτημένης πρόσβασης στα δεδομένα.</p>
+               </div>
+            </div>
+          )}
+          {showUsersModal && (
+            <UsersModal onClose={() => setShowUsersModal(false)} />
+          )}
           {showSettings && userProfile && (
             <SettingsModal 
               userProfile={userProfile} 
@@ -246,7 +300,7 @@ export default function App() {
               onUpdate={setUserProfile} 
             />
           )}
-          {view === 'list' && (
+          {userProfile && userProfile.isApproved !== false && view === 'list' && (
             <motion.div 
               key="list"
               initial={{ opacity: 0, scale: 0.98 }}
@@ -255,6 +309,8 @@ export default function App() {
               className="h-full flex-1"
             >
               <IncidentList 
+                incidents={incidents}
+                loading={incidentsLoading}
                 onEdit={(incident) => {
                   setEditingIncident(incident);
                   setView('form');
@@ -262,7 +318,7 @@ export default function App() {
               />
             </motion.div>
           )}
-          {view === 'map' && (
+          {userProfile && userProfile.isApproved !== false && view === 'map' && (
             <motion.div 
               key="map"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -271,14 +327,16 @@ export default function App() {
               className="h-[75vh] landscape:h-[80vh] sm:h-[calc(100vh-280px)] flex flex-col w-full bg-white rounded-[32px] sm:rounded-[48px] overflow-hidden shadow-xl border border-slate-200 relative z-10"
             >
               <IncidentMap 
+                incidents={incidents}
                 onEdit={(incident) => {
                   setEditingIncident(incident);
+                  window.sessionStorage.setItem('prevView', 'map');
                   setView('form');
                 }} 
               />
             </motion.div>
           )}
-          {view === 'form' && (
+          {userProfile && userProfile.isApproved !== false && view === 'form' && (
             <motion.div 
               key="form"
               initial={{ opacity: 0, y: 30 }}
@@ -290,8 +348,15 @@ export default function App() {
                 key={editingIncident ? editingIncident.id : 'new'}
                 incident={editingIncident} 
                 userProfile={userProfile}
+                allIncidents={incidents}
                 onClose={() => {
-                  setView('list');
+                  const prev = window.sessionStorage.getItem('prevView');
+                  if (prev === 'map') {
+                    setView('map');
+                    window.sessionStorage.removeItem('prevView');
+                  } else {
+                    setView('list');
+                  }
                   setEditingIncident(null);
                 }} 
                 onOpenIncident={handleOpenIncident}
@@ -302,7 +367,7 @@ export default function App() {
       </main>
 
       {/* Navigation Bar */}
-      {view !== 'form' && (
+      {view !== 'form' && userProfile && userProfile.isApproved !== false && (
         <nav className="fixed bottom-6 landscape:bottom-2 sm:bottom-8 left-1/2 -translate-x-1/2 bg-white/95 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200/60 px-6 sm:px-10 py-3 landscape:py-1.5 sm:py-5 flex items-center gap-6 sm:gap-12 z-[5000] max-w-[90vw] sm:max-w-none backdrop-blur-md">
           <button 
             onClick={() => { setView('list'); setEditingIncident(null); }}

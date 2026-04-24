@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Search, User as UserIcon, Camera, Image as ImageIcon, Link2, MapPin, Calendar } from 'lucide-react';
+import { Shield, Search, User as UserIcon, Camera, Image as ImageIcon, Link2, MapPin, Calendar, Home, Store, CarFront, Car } from 'lucide-react';
 import { Incident } from '../types';
 import { toUpperCaseAccentFree } from '../lib/Typography';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
@@ -7,6 +7,8 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { format } from 'date-fns';
 import { el } from 'date-fns/locale';
+
+import { LinkedIncidentTag } from './LinkedIncidentTag';
 
 // Fix for default marker icon in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -38,14 +40,41 @@ export default function IncidentReadOnlyView({ incident, setFullscreenImage, onO
                   <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wider ${incident.status === 'Τετελεσμένη' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
                     {incident.status ? toUpperCaseAccentFree(incident.status) : '-'}
                   </span>
-                  <span className="font-bold text-slate-700">{incident.theftType ? toUpperCaseAccentFree(incident.theftType) : '-'}</span>
+                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                    {(() => {
+                      if (!incident.theftType) return '-';
+                      switch (incident.theftType) {
+                        case 'Οικίας':
+                        case 'Οικία (Κύρια)':
+                        case 'Οικία (Εξοχική)':
+                          return <><Home className="w-4 h-4 text-slate-400" /> {toUpperCaseAccentFree(incident.theftType)}</>;
+                        case 'Επιχείρησης':
+                        case 'Επιχείρηση':
+                          return <><Store className="w-4 h-4 text-slate-400" /> {toUpperCaseAccentFree(incident.theftType)}</>;
+                        case 'Κλοπή από όχημα':
+                        case 'Από όχημα':
+                          return <><CarFront className="w-4 h-4 text-slate-400" /> {toUpperCaseAccentFree(incident.theftType)}</>;
+                        case 'Κλοπή οχήματος':
+                        case 'Κλοπή Αυτοκινήτου':
+                          return <><Car className="w-4 h-4 text-slate-400" /> {toUpperCaseAccentFree(incident.theftType)}</>;
+                        default: return toUpperCaseAccentFree(incident.theftType);
+                      }
+                    })()}
+                  </span>
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Χρόνος</div>
+                <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Χρόνος Συμβάντος</div>
                 <div className="font-medium text-slate-700 flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-slate-400" />
-                  {incident.incidentDate ? format(new Date(incident.incidentDate), 'PPpp', { locale: el }) : '-'}
+                  {incident.isTimeRange ? (
+                    <div className="flex flex-col">
+                      <span>Από {incident.incidentDateFrom ? format(new Date(incident.incidentDateFrom), 'PPpp', { locale: el }) : '-'}</span>
+                      <span>Εώς {incident.incidentDateTo ? format(new Date(incident.incidentDateTo), 'PPpp', { locale: el }) : '-'}</span>
+                    </div>
+                  ) : (
+                    incident.incidentDate ? format(new Date(incident.incidentDate), 'PPpp', { locale: el }) : '-'
+                  )}
                 </div>
               </div>
               <div>
@@ -62,7 +91,13 @@ export default function IncidentReadOnlyView({ incident, setFullscreenImage, onO
               <span className="p-2 bg-slate-200/50 rounded-lg text-slate-500"><Search className="w-4 h-4" /></span> ΣΤΟΙΧΕΙΑ ΤΕΛΕΣΗΣ & ΔΡΑΣΤΩΝ
             </h3>
             <div className="space-y-3">
-              {incident.modusOperandi && (
+              {incident.theftType === 'Κλοπή οχήματος' && incident.carCategory && (
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Κατηγορία Οχήματος</div>
+                  <div className="font-medium text-slate-700">{incident.carCategory}</div>
+                </div>
+              )}
+              {incident.theftType !== 'Κλοπή οχήματος' && incident.modusOperandi && (
                 <div>
                   <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Μέθοδος (M.O.)</div>
                   <div className="font-medium text-slate-700">{incident.modusOperandi}</div>
@@ -107,24 +142,6 @@ export default function IncidentReadOnlyView({ incident, setFullscreenImage, onO
                       <div className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{incident.plateNumber}</div>
                     </div>
                   )}
-                </div>
-              )}
-              {incident.usedTools && (
-                <div>
-                  <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Χρήση Εργαλείων</div>
-                  <div className="flex flex-wrap gap-1.5 mt-1">
-                    {incident.usedToolTypes && incident.usedToolTypes.length > 0 ? (
-                      incident.usedToolTypes.map(tool => (
-                        <span key={tool} className="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-1 rounded-md uppercase">
-                          {toUpperCaseAccentFree(tool)}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-1 rounded-md uppercase">
-                        {toUpperCaseAccentFree('ΝΑΙ')}
-                      </span>
-                    )}
-                  </div>
                 </div>
               )}
             </div>
@@ -176,22 +193,15 @@ export default function IncidentReadOnlyView({ incident, setFullscreenImage, onO
             </div>
           </div>
 
-          {(incident.photo1 || incident.photo2) && (
+          {incident.photo1 && (
             <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 flex items-center gap-2.5">
-                <span className="p-2 bg-slate-200/50 rounded-lg text-slate-500"><ImageIcon className="w-4 h-4" /></span> ΦΩΤΟΓΡΑΦΙΕΣ
+                <span className="p-2 bg-slate-200/50 rounded-lg text-slate-500"><ImageIcon className="w-4 h-4" /></span> ΦΩΤΟΓΡΑΦΙΑ
               </h3>
-              <div className="grid grid-cols-2 gap-3">
-                {incident.photo1 && (
-                  <div className="aspect-video bg-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <img src={incident.photo1} alt="Φωτογραφία 1" className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullscreenImage(incident.photo1!)} />
-                  </div>
-                )}
-                {incident.photo2 && (
-                  <div className="aspect-video bg-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <img src={incident.photo2} alt="Φωτογραφία 2" className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullscreenImage(incident.photo2!)} />
-                  </div>
-                )}
+              <div className="grid grid-cols-1 gap-3">
+                <div className="aspect-video max-h-[300px] w-full bg-slate-200 rounded-xl overflow-hidden shadow-sm">
+                  <img src={incident.photo1} alt="Φωτογραφία" className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullscreenImage(incident.photo1!)} />
+                </div>
               </div>
             </div>
           )}
@@ -214,11 +224,9 @@ export default function IncidentReadOnlyView({ incident, setFullscreenImage, onO
                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#1A237E] mb-3 flex items-center gap-2.5">
                    <span className="p-2 bg-blue-100 rounded-lg text-blue-600"><Link2 className="w-4 h-4" /></span> ΣΥΣΧΕΤΙΖΟΜΕΝΑ ΣΥΜΒΑΝΤΑ
                  </h3>
-                 <div className="flex flex-wrap gap-2">
-                    {incident.linkedIncidents.split(',').map(id => (
-                      <button type="button" onClick={() => onOpenIncident?.(id.trim())} key={id} className="text-xs font-mono font-bold bg-[#1A237E]/10 text-[#1A237E] hover:bg-[#1A237E] hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-[#1A237E]/20">
-                        {id.trim()}
-                      </button>
+                 <div className="flex flex-col gap-2">
+                    {incident.linkedIncidents.split(',').filter(id => id.trim() !== '').map(id => (
+                      <LinkedIncidentTag key={id.trim()} id={id.trim()} onOpen={onOpenIncident} />
                     ))}
                  </div>
                </div>

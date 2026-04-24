@@ -13,14 +13,22 @@ interface LinkedIncidentSearchModalProps {
   onClose: () => void;
   onSelect: (incidentId: string) => void;
   selectedIds: string[];
+  allIncidents?: Incident[];
 }
 
-export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedIds }: LinkedIncidentSearchModalProps) {
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedIds, allIncidents }: LinkedIncidentSearchModalProps) {
+  const [incidents, setIncidents] = useState<Incident[]>(allIncidents || []);
+  const [loading, setLoading] = useState(!allIncidents);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
+    if (allIncidents) {
+      setIncidents(allIncidents);
+      setLoading(false);
+      return;
+    }
+    
+    // Only fetch if allIncidents wasn't provided (fallback)
     const fetchIncidents = async () => {
       try {
         const q = query(
@@ -39,7 +47,7 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
       }
     };
     fetchIncidents();
-  }, []);
+  }, [allIncidents]);
 
   const filteredIncidents = incidents.filter(inc => {
     if (!searchQuery) return true;
