@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { db, auth, handleFirestoreError } from '../firebase';
 import { Incident } from '../types';
-import { Search, Filter, Calendar, MapPin, ChevronRight, AlertTriangle, CheckCircle, Plus } from 'lucide-react';
+import { Search, Filter, Calendar, MapPin, ChevronRight, AlertTriangle, CheckCircle, Plus, Trash2, AlertCircle, X, LayoutGrid, LayoutList, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { el } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { toUpperCaseAccentFree } from '../lib/Typography';
+
+import { toast } from 'react-hot-toast';
 
 interface IncidentListProps {
   onEdit: (incident: Incident) => void;
@@ -22,6 +24,7 @@ export default function IncidentList({ onEdit }: IncidentListProps) {
   const [dateFilterMode, setDateFilterMode] = useState('All');
   const [customMonthStart, setCustomMonthStart] = useState('');
   const [customMonthEnd, setCustomMonthEnd] = useState('');
+  const [viewMode, setViewMode] = useState<'detailed' | 'compact'>('detailed');
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -37,6 +40,9 @@ export default function IncidentList({ onEdit }: IncidentListProps) {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Incident));
       setIncidents(data);
       setLoading(false);
+    }, (error) => {
+      console.error("Σφάλμα συγχρονισμού λίστας συμβάντων:", error);
+      toast.error("Σφάλμα σύνδεσης. Η λίστα λειτουργεί εκτός σύνδεσης.");
     });
 
     return unsubscribe;
@@ -102,14 +108,14 @@ export default function IncidentList({ onEdit }: IncidentListProps) {
             <input 
               type="text" 
               placeholder="Αναζήτηση διεύθυνσης, είδους ή παθόντα..."
-              className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-14 pr-6 focus:ring-4 focus:ring-[#D4AF37]/20 focus:border-[#D4AF37] outline-none transition-all shadow-sm font-medium text-slate-900"
+              className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-12 pr-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-medium text-slate-900"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="grid grid-cols-2 lg:flex lg:flex-row gap-3 shrink-0">
             <select 
-              className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-[#1A237E]/20 focus:border-[#1A237E] font-bold text-xs sm:text-[11px] uppercase tracking-widest text-[#1A237E] text-ellipsis overflow-hidden whitespace-nowrap lg:w-40 appearance-none text-center"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-xs text-slate-700 text-ellipsis overflow-hidden whitespace-nowrap lg:w-40"
               value={dateFilterMode}
               onChange={(e) => setDateFilterMode(e.target.value)}
             >
@@ -120,7 +126,7 @@ export default function IncidentList({ onEdit }: IncidentListProps) {
               <option value="Custom">{toUpperCaseAccentFree('ΕΠΙΛΟΓΗ ΜΗΝΑ')}</option>
             </select>
             <select 
-              className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-[#1A237E]/20 focus:border-[#1A237E] font-bold text-xs sm:text-[11px] uppercase tracking-widest text-slate-600 text-ellipsis overflow-hidden whitespace-nowrap lg:w-40 appearance-none text-center"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-xs text-slate-700 text-ellipsis overflow-hidden whitespace-nowrap lg:w-40"
               value={filterArea}
               onChange={(e) => setFilterArea(e.target.value)}
             >
@@ -135,7 +141,7 @@ export default function IncidentList({ onEdit }: IncidentListProps) {
               ))}
             </select>
             <select 
-              className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-[#1A237E]/20 focus:border-[#1A237E] font-bold text-xs sm:text-[11px] uppercase tracking-widest text-slate-600 text-ellipsis overflow-hidden whitespace-nowrap lg:w-40 appearance-none text-center"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-xs text-slate-700 text-ellipsis overflow-hidden whitespace-nowrap lg:w-40"
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
             >
@@ -144,10 +150,10 @@ export default function IncidentList({ onEdit }: IncidentListProps) {
               <option value="Οικία (Εξοχική)">{toUpperCaseAccentFree('Οικία (Εξοχική)')}</option>
               <option value="Επιχείρηση">{toUpperCaseAccentFree('Επιχείρηση')}</option>
               <option value="Από όχημα">{toUpperCaseAccentFree('Από όχημα')}</option>
-              <option value="Κλοπή Αυτοκινήτου">{toUpperCaseAccentFree('Κλοπή Οχήματος')}</option>
+              <option value="Κλοπή Αυτοκινήτου">{toUpperCaseAccentFree('Κλοπή Αυτοκινήτου')}</option>
             </select>
             <select 
-              className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-[#1A237E]/20 focus:border-[#1A237E] font-bold text-xs sm:text-[11px] uppercase tracking-widest text-slate-600 text-ellipsis overflow-hidden whitespace-nowrap lg:w-40 appearance-none text-center"
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-xs text-slate-700 text-ellipsis overflow-hidden whitespace-nowrap lg:w-40"
               value={filterMO}
               onChange={(e) => setFilterMO(e.target.value)}
             >
@@ -194,15 +200,32 @@ export default function IncidentList({ onEdit }: IncidentListProps) {
         </AnimatePresence>
       </div>
 
-      {/* Stats Counter */}
-      <div className="flex items-center justify-between px-2">
-        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+      {/* Stats Counter & View Toggles */}
+      <div className="flex flex-row items-center justify-between px-1 sm:px-2 gap-4 mb-4 bg-slate-50 border border-slate-100 rounded-2xl p-2 sm:p-3">
+        <h3 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 pl-2">
           {toUpperCaseAccentFree(`ΕΜΦΑΝΙΣΗ ${filteredIncidents.length} ΠΕΡΙΣΤΑΤΙΚΩΝ`)}
         </h3>
+        
+        <div className="flex bg-white shadow-sm border border-slate-100 rounded-xl p-1 shrink-0">
+          <button
+            onClick={() => setViewMode('detailed')}
+            className={`p-2 rounded-lg transition-all flex items-center justify-center ${viewMode === 'detailed' ? 'bg-white shadow-sm text-[#1A237E]' : 'text-slate-400 hover:text-slate-600'}`}
+            title="Αναλυτική προβολή"
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('compact')}
+            className={`p-2 rounded-lg transition-all flex items-center justify-center ${viewMode === 'compact' ? 'bg-white shadow-sm text-[#1A237E]' : 'text-slate-400 hover:text-slate-600'}`}
+            title="Συμπαγής προβολή"
+          >
+            <LayoutList className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className={viewMode === 'detailed' ? "grid grid-cols-1 md:grid-cols-2 gap-6" : "grid grid-cols-1 gap-3"}>
         <AnimatePresence>
           {filteredIncidents.map((incident) => (
             <motion.div
@@ -212,53 +235,74 @@ export default function IncidentList({ onEdit }: IncidentListProps) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98 }}
               onClick={() => onEdit(incident)}
-              className="bg-white border sm:border-slate-200 rounded-[24px] sm:rounded-[32px] p-6 sm:p-8 hover:shadow-xl hover:border-[#1A237E]/30 transition-all cursor-pointer group relative overflow-hidden shadow-sm"
+              className={`bg-white border transition-all cursor-pointer group relative overflow-hidden ${
+                viewMode === 'detailed' 
+                  ? "border-slate-200 rounded-2xl p-5 sm:p-6 hover:shadow-lg hover:border-blue-200" 
+                  : "border-slate-100 rounded-xl p-3 sm:p-4 hover:border-blue-300 hover:shadow-md"
+              }`}
             >
-              {/* Status Indicator */}
-              <div className={`absolute top-0 right-0 px-4 py-2 rounded-bl-2xl text-[9px] font-black uppercase tracking-widest ${incident.status === 'Τετελεσμένη' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
-                {toUpperCaseAccentFree(incident.status)}
-              </div>
-
-              <div className="flex items-start gap-4 sm:gap-6">
-                <div className={`p-4 shrink-0 rounded-2xl ${incident.status === 'Τετελεσμένη' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
-                  {incident.status === 'Τετελεσμένη' ? <AlertTriangle className="w-6 h-6 sm:w-7 sm:h-7" /> : <Plus className="w-6 h-6 sm:w-7 sm:h-7" />}
+              <div className={`flex ${viewMode === 'detailed' ? 'items-start gap-4 sm:gap-6' : 'items-center gap-3 sm:gap-4'}`}>
+                <div className={`${viewMode === 'detailed' ? 'p-4 rounded-2xl' : 'p-2.5 rounded-xl'} shrink-0 flex items-center justify-center ${incident.status === 'Τετελεσμένη' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
+                  {incident.status === 'Τετελεσμένη' ? <AlertTriangle className={viewMode === 'detailed' ? "w-6 h-6" : "w-5 h-5"} /> : <Plus className={viewMode === 'detailed' ? "w-6 h-6" : "w-5 h-5"} />}
                 </div>
-                <div className="flex-1 min-w-0 pr-2">
-                  <h3 className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-[#1A237E] transition-colors break-words line-clamp-2">
-                    {toUpperCaseAccentFree(incident.theftType)}
-                  </h3>
-                  <div className="flex items-start gap-2 text-slate-500 text-sm mt-2 font-medium">
-                    <MapPin className="w-4 h-4 shrink-0 text-slate-300 mt-0.5" />
-                    <span className="line-clamp-2">{incident.address}, {toUpperCaseAccentFree(incident.area)}</span>
+                <div className="flex-1 min-w-0">
+                  <div className={`flex flex-col ${viewMode === 'compact' ? 'sm:flex-row sm:items-center' : ''} gap-1 sm:gap-3`}>
+                    <div className={`flex items-center gap-2 ${viewMode === 'detailed' ? 'mb-2' : ''}`}>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${incident.status === 'Τετελεσμένη' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
+                        {toUpperCaseAccentFree(incident.status)}
+                      </span>
+                    </div>
+                    <h3 className={`${viewMode === 'detailed' ? 'text-base sm:text-lg' : 'text-sm'} font-bold text-slate-900 group-hover:text-blue-600 transition-colors break-words line-clamp-1`}>
+                      {toUpperCaseAccentFree(incident.theftType)}
+                    </h3>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-slate-400 text-[9px] sm:text-[10px] mt-4 font-bold uppercase tracking-wider">
-                    <Calendar className="w-3.5 h-3.5 shrink-0" />
-                    <span className="whitespace-nowrap text-slate-400">
-                      ΚΑΤ: {incident.recordedAt?.toDate ? format(incident.recordedAt.toDate(), "d MMM yy", { locale: el }) : '...'}
-                    </span>
-                    {incident.incidentDate && (
-                      <>
-                        <span className="hidden sm:inline-block mx-1">•</span>
-                        <span className="whitespace-nowrap text-[#1A237E]/80 font-black">
-                         ΣΥΜ: {format(new Date(incident.incidentDate), "d MMM yy | HH:mm", { locale: el })}
-                        </span>
-                      </>
-                    )}
-                    <span className="hidden sm:inline-block mx-1 text-slate-300">•</span>
-                    <span className="text-slate-400 shrink-0">
-                      <span className="font-black text-[#1A237E]/60">{incident.creatorRank ? toUpperCaseAccentFree(incident.creatorRank) + ' ' : ''}</span>
-                      {incident.creatorName ? toUpperCaseAccentFree(incident.creatorName) : incident.createdBy?.substring(0, 8)}
-                    </span>
-                  </div>
+                  
+                  {viewMode === 'detailed' ? (
+                    <>
+                      <div className="flex items-start gap-2 text-slate-500 text-sm mt-2 font-medium">
+                        <MapPin className="w-4 h-4 shrink-0 text-slate-300 mt-0.5" />
+                        <span className="line-clamp-2">{incident.address}, {toUpperCaseAccentFree(incident.area)}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-slate-500 text-xs mt-4 font-medium">
+                        <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md">
+                          <Calendar className="w-4 h-4 text-slate-400" />
+                          <span>{incident.recordedAt?.toDate ? format(incident.recordedAt.toDate(), "d MMM yy", { locale: el }) : '...'}</span>
+                        </div>
+                        {incident.incidentDate && (
+                          <div className="flex items-center gap-1.5 bg-blue-50/50 text-blue-700 px-2 py-1 rounded-md">
+                            <span className="font-semibold">{format(new Date(incident.incidentDate), "d MMM yy | HH:mm", { locale: el })}</span>
+                          </div>
+                        )}
+                        <div className="flex text-slate-400 w-full sm:w-auto sm:ml-auto items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-md overflow-hidden mt-1 sm:mt-0">
+                          {incident.creatorRank && <span className="text-slate-500 font-semibold truncate max-w-[45%] sm:max-w-none">{incident.creatorRank}</span>}
+                          <span className="truncate flex-1">{incident.creatorName || incident.createdBy?.substring(0, 8)}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1.5 text-xs text-slate-500">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="line-clamp-1">{incident.area}</span>
+                      </div>
+                      {incident.incidentDate && (
+                         <div className="flex items-center gap-1.5 sm:border-l sm:border-slate-200 sm:pl-4">
+                           <Clock className="w-3.5 h-3.5 text-slate-400" />
+                           <span className="font-semibold">{format(new Date(incident.incidentDate), "d MMM yy | HH:mm", { locale: el })}</span>
+                         </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="self-center hidden sm:block">
-                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-[#1A237E] group-hover:text-white transition-all">
+                
+                <div className="self-center hidden sm:flex items-center gap-2">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${viewMode === 'detailed' ? 'bg-slate-50 group-hover:bg-blue-600 group-hover:text-white' : 'text-slate-300 group-hover:text-blue-500'}`}>
                     <ChevronRight className="w-5 h-5" />
                   </div>
                 </div>
               </div>
 
-              {incident.notes && (
+              {viewMode === 'detailed' && incident.notes && (
                 <div className="mt-6 pt-6 border-t border-slate-100">
                   <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed italic">
                     "{incident.notes}"

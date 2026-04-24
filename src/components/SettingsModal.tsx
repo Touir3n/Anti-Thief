@@ -40,9 +40,9 @@ export default function SettingsModal({ userProfile, onClose, onUpdate }: Settin
       onUpdate({ ...userProfile, notificationPrefs: newPrefs });
       toast.success(toUpperCaseAccentFree('ΟΙ ΡΥΘΜΙΣΕΙΣ ΑΠΟΘΗΚΕΥΤΗΚΑΝ'));
       onClose();
-    } catch (err) {
-      console.error(err);
-      toast.error('Η αποθήκευση απέτυχε');
+    } catch (err: any) {
+      console.error("Σφάλμα κατά την αποθήκευση ρυθμίσεων:", err);
+      toast.error(`Η αποθήκευση απέτυχε: ${err?.message || 'Άγνωστο σφάλμα'}`);
     } finally {
       setLoading(false);
     }

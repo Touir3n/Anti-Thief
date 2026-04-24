@@ -1,13 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { db, auth, storage, handleFirestoreError } from '../firebase';
-import { doc, setDoc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, serverTimestamp, getDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Incident, Area, Status, TheftType, StolenItem, SuspectStatus, ModusOperandi, UserProfile } from '../types';
-import { X, Check, MapPin, Camera, AlertTriangle, ShieldCheck, User as UserIcon, Phone, Clock, FileText, Loader2, Lock, Unlock } from 'lucide-react';
+import { X, Check, MapPin, Camera, AlertTriangle, ShieldCheck, User as UserIcon, Phone, Clock, FileText, Loader2, Lock, Unlock, Trash2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { toUpperCaseAccentFree } from '../lib/Typography';
-import { compressImage } from '../lib/ImageCompression';
+import imageCompression from 'browser-image-compression';
 
 interface IncidentFormProps {
   incident?: Incident | null;
@@ -18,6 +18,7 @@ interface IncidentFormProps {
 }
 
 import LinkedIncidentSearchModal from './LinkedIncidentSearchModal';
+import IncidentReadOnlyView from './IncidentReadOnlyView';
 
 const AREAS: Area[] = [
   'Ασπροβάλτα', 'Σταυρός', 'Νέα Βρασνά', 'Νέα Μάδυτος',
@@ -26,9 +27,10 @@ const AREAS: Area[] = [
   'Μόδι', 'Παραλία Βρασνών', 'Ρεντίνα', 'Σκεπαστό'
 ];
 const STATUSES: Status[] = ['Τετελεσμένη', 'Απόπειρα'];
-const THEFT_TYPES: TheftType[] = ['Οικία (Κύρια)', 'Οικία (Εξοχική)', 'Επιχείρηση', 'Από όχημα', 'Κλοπή Αυτοκινήτου', 'Οχήματος'];
+const THEFT_TYPES: TheftType[] = ['Οικία (Κύρια)', 'Οικία (Εξοχική)', 'Επιχείρηση', 'Από όχημα', 'Κλοπή Αυτοκινήτου'];
 const STOLEN_ITEMS: StolenItem[] = ['Ηλεκτρονικά', 'Κοσμήματα', 'Μετρητά', 'Εργαλεία', 'Άλλο'];
 const MO_TYPES: ModusOperandi[] = ['Ανασφάλιστο', 'Θραύση υαλοπίνακα', 'Παραβίαση κλειδαριάς', 'Διάρρηξη παραθύρου/μπαλκονόπορτας', 'Χωρίς ίχνη', 'Άλλο'];
+const TOOL_TYPES = ['Λοστός', 'Κατσαβίδι', 'Τρυπάνι', 'Τροχός', 'Αντικλείδι', 'Άλλο'];
 
 export default function IncidentForm({ incident, userProfile, onClose, onOpenIncident }: IncidentFormProps) {
   const [loading, setLoading] = useState(false);
@@ -41,12 +43,85 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
   const [imageCompressing, setImageCompressing] = useState<{ [key: string]: boolean }>({});
   const [showLinkedModal, setShowLinkedModal] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(!!incident);
+  const [deleteStep, setDeleteStep] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteUnlocked, setIsDeleteUnlocked] = useState(false);
+
+  const handleDelete = async () => {
+    if (!incident) return;
+    setIsDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'incidents', incident.id));
+      toast.success(toUpperCaseAccentFree('ΤΟ ΣΥΜΒΑΝ ΔΙΑΓΡΑΦΗΚΕ ΕΠΙΤΥΧΩΣ'));
+      onClose();
+    } catch (error: any) {
+      console.error('Σφάλμα διαγραφής:', error);
+      toast.error('Η διαγραφή απέτυχε. Ελέγξτε τα δικαιώματά σας.');
+      handleFirestoreError(error, 'delete', 'incidents');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const clearPhoto = (key: string) => {
     setPhotoFiles(prev => ({ ...prev, [key]: null }));
     setPhotoPreviews(prev => ({ ...prev, [key]: '' }));
     handleChange(key as any, ''); // Clear from formData so it's removed in DB if updated
   };
+
+  const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const addressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleAddressChange = (value: string) => {
+    handleChange('address', value);
+    
+    if (addressTimeoutRef.current) clearTimeout(addressTimeoutRef.current);
+    
+    if (!value || value.length < 3) {
+      setAddressSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    setIsSearchingAddress(true);
+    addressTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value)}&format=json&addressdetails=1&limit=5&countrycodes=gr`);
+        const data = await response.json();
+        setAddressSuggestions(data);
+        setShowSuggestions(true);
+      } catch (error) {
+        console.error("Geocoding failed", error);
+      } finally {
+        setIsSearchingAddress(false);
+      }
+    }, 500);
+  };
+
+  const selectAddress = (suggestion: any) => {
+    // Get the road/street address specifically, or use display_name
+    const addressName = suggestion.address?.road || suggestion.name || suggestion.display_name.split(',')[0];
+    handleChange('address', addressName);
+    handleChange('location', {
+      lat: parseFloat(suggestion.lat),
+      lng: parseFloat(suggestion.lon)
+    });
+    
+    setShowSuggestions(false);
+  };
+
+  const [isManualDate, setIsManualDate] = useState(!!incident);
+
+  useEffect(() => {
+    if (!isManualDate && !incident) {
+      const interval = setInterval(() => {
+        setFormData(prev => ({ ...prev, incidentDate: new Date().toISOString().slice(0, 16) }));
+      }, 60000); // Check every minute
+      return () => clearInterval(interval);
+    }
+  }, [isManualDate, incident]);
 
   const [formData, setFormData] = useState<Partial<Incident>>(incident || {
     area: 'Ασπροβάλτα',
@@ -63,6 +138,41 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
     location: { lat: 40.6644, lng: 23.6967 } // Default Volvi Area (Stavros)
   });
 
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data && data.address) {
+        const addrContext = data.address.village || data.address.town || data.address.city || data.address.municipality || '';
+        const predefinedArea = AREAS.find(a => 
+          addrContext.toLowerCase().includes(a.toLowerCase()) || 
+          a.toLowerCase().includes(addrContext.toLowerCase())
+        );
+
+        let addressStr = '';
+        if (data.address.road) {
+            addressStr += data.address.road;
+            if (data.address.house_number) {
+                addressStr += ' ' + data.address.house_number;
+            }
+        } else if (data.name) {
+            addressStr = data.name;
+        } else if (data.display_name) {
+            addressStr = data.display_name.split(',')[0];
+        }
+
+        setFormData(prev => ({
+          ...prev,
+          ...(predefinedArea ? { area: predefinedArea } : {}),
+          ...(addressStr ? { address: addressStr } : {})
+        }));
+      }
+    } catch (error) {
+      console.error("Reverse geocoding failed", error);
+    }
+  };
+
   const handleChange = (field: keyof Incident, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -76,6 +186,15 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
     }
   };
 
+  const handleToggleToolType = (tool: string) => {
+    const current = formData.usedToolTypes || [];
+    if (current.includes(tool)) {
+      handleChange('usedToolTypes', current.filter(i => i !== tool));
+    } else {
+      handleChange('usedToolTypes', [...current, tool]);
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
     const file = e.target.files?.[0];
     if (file && key) {
@@ -83,11 +202,16 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
       setPhotoPreviews(prev => ({ ...prev, [key]: URL.createObjectURL(file) })); // Display preview instantly
       
       try {
-        // Compress strongly so both fit within Firestore's 1MB limit easily
-        const compressedFile = await compressImage(file, 800, 0.5);
+        const options = {
+          maxSizeMB: 0.1,
+          maxWidthOrHeight: 800,
+          useWebWorker: true,
+        };
+        const compressedFile = await imageCompression(file, options);
         setPhotoFiles(prev => ({ ...prev, [key]: compressedFile }));
-      } catch (error) {
-        console.error("Compression failed", error);
+      } catch (error: any) {
+        console.error("Compression failed:", error);
+        toast.error("Σφάλμα κατά τη συμπίεση της φωτογραφίας.");
         setPhotoFiles(prev => ({ ...prev, [key]: file })); // Fallback to original
       } finally {
         setImageCompressing(prev => ({ ...prev, [key]: false }));
@@ -97,13 +221,15 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
 
   const getCurrentLocation = () => {
     if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        handleChange('location', {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        });
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        handleChange('location', { lat, lng });
+        toast.success("Η τοποθεσία ενημερώθηκε επιτυχώς");
+        await reverseGeocode(lat, lng);
       }, (error) => {
-        alert("Σφάλμα GPS: " + error.message);
+        console.error("Σφάλμα GPS:", error);
+        toast.error("Σφάλμα GPS: " + error.message);
       });
     }
   };
@@ -120,6 +246,11 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser) return;
+
+    if (!formData.area || !formData.address || !formData.theftType) {
+      toast.error('Παρακαλώ συμπληρώστε τα υποχρεωτικά πεδία (Περιοχή, Διεύθυνση, Είδος)');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -142,8 +273,8 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             const base64String = await fileToBase64(file);
             incidentData[key] = base64String;
           } catch (uploadError: any) {
-            console.error("Base64 conversion failed:", uploadError);
-            toast.error(`ΑΠΟΤΥΧΙΑ ΜΕΤΑΤΡΟΠΗΣ ΦΩΤΟΓΡΑΦΙΑΣ`, { duration: 4000 });
+            console.error(`Σφάλμα κατά την επεξεργασία της φωτογραφίας ${key}:`, uploadError);
+            toast.error(`Αποτυχία επεξεργασίας φωτογραφίας (Μέρος ${key.replace('photo', '')}). Η εγγραφή θα αποθηκευτεί χωρίς αυτή.`, { duration: 5000 });
           }
         }
       }
@@ -215,7 +346,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
   };
 
   return (
-    <div className="bg-white border sm:border-slate-200 rounded-[24px] sm:rounded-[32px] overflow-hidden shadow-xl sm:shadow-2xl mb-24 sm:mb-32">
+    <div className="bg-white border sm:border-slate-200 rounded-[24px] sm:rounded-[32px] overflow-hidden shadow-xl sm:shadow-2xl mb-24 sm:mb-32 relative">
       {/* Header */}
       <div className="bg-[#1A237E] p-6 sm:p-8 flex items-center justify-between">
         <div className="flex items-center gap-3 sm:gap-4 text-white">
@@ -245,15 +376,28 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
         </div>
       </div>
 
-      {/* Editor Info Panel */}
-      {incident?.updatedByName && (
-        <div className="bg-amber-50 border-b border-amber-100 p-3 sm:px-8 text-amber-900 text-[10px] sm:text-xs">
-          <span className="font-bold">Τελευταία ενημέρωση:</span> {incident.updatedByName} {incident.updatedByRank ? `(${incident.updatedByRank})` : ''} - {incident.updatedAt?.toDate ? incident.updatedAt.toDate().toLocaleString('el-GR') : (incident.updatedAt?.seconds ? new Date(incident.updatedAt.seconds * 1000).toLocaleString('el-GR') : '')}
+      {/* Editor & Creator Info Panel */}
+      {incident && (
+        <div className="bg-amber-50 border-b border-amber-100 p-3 sm:px-8 text-amber-900 text-[10px] sm:text-xs flex flex-col gap-1">
+          {(incident.creatorName || incident.createdBy) && (
+            <div>
+              <span className="font-bold">Δημιουργήθηκε από:</span> {incident.creatorName || incident.createdBy} {incident.creatorRank ? `(${incident.creatorRank})` : ''}
+              {incident.recordedAt && ` - ${incident.recordedAt?.toDate ? incident.recordedAt.toDate().toLocaleString('el-GR') : (incident.recordedAt?.seconds ? new Date(incident.recordedAt.seconds * 1000).toLocaleString('el-GR') : '')}`}
+            </div>
+          )}
+          {incident.updatedByName && (
+            <div>
+              <span className="font-bold">Τελευταία ενημέρωση:</span> {incident.updatedByName} {incident.updatedByRank ? `(${incident.updatedByRank})` : ''} - {incident.updatedAt?.toDate ? incident.updatedAt.toDate().toLocaleString('el-GR') : (incident.updatedAt?.seconds ? new Date(incident.updatedAt.seconds * 1000).toLocaleString('el-GR') : '')}
+            </div>
+          )}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="p-5 sm:p-8">
-        <fieldset disabled={isReadOnly} className="min-w-0 border-0 p-0 m-0 space-y-8 sm:space-y-10">
+        {isReadOnly ? (
+          <IncidentReadOnlyView incident={formData} setFullscreenImage={setFullscreenImage} onOpenIncident={onOpenIncident} />
+        ) : (
+          <fieldset className="min-w-0 border-0 p-0 m-0 space-y-8 sm:space-y-10">
         {/* Section: Basic Info */}
         <section className="space-y-6">
           <div className="flex items-center gap-3 text-[#1A237E] font-black text-[10px] uppercase tracking-[0.2em] mb-6">
@@ -265,9 +409,12 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
               <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">Ημ/νία & Ωρα Συμβάντος</label>
               <input 
                 type="datetime-local"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 sm:px-5 sm:py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-medium text-base"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 sm:px-5 sm:py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-medium text-base h-12 sm:h-auto"
                 value={formData.incidentDate || ''}
-                onChange={(e) => handleChange('incidentDate', e.target.value)}
+                onChange={(e) => {
+                  setIsManualDate(true);
+                  handleChange('incidentDate', e.target.value);
+                }}
                 required
               />
             </div>
@@ -311,16 +458,58 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
                 {AREAS.map(a => <option key={a} value={a}>{toUpperCaseAccentFree(a)}</option>)}
               </select>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('Διεύθυνση')}</label>
-              <input 
-                type="text"
-                placeholder="Οδός και αριθμός..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 sm:px-5 sm:py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-medium text-base"
-                value={formData.address || ''}
-                onChange={(e) => handleChange('address', e.target.value)}
-                required
-              />
+              <div className="relative">
+                <input 
+                  type="text"
+                  placeholder="Οδός και αριθμός..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 sm:px-5 sm:py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-medium text-base pr-10"
+                  value={formData.address || ''}
+                  onChange={(e) => handleAddressChange(e.target.value)}
+                  onFocus={() => {
+                    if (addressSuggestions.length > 0) setShowSuggestions(true);
+                  }}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                  required
+                />
+                {isSearchingAddress && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#1A237E]">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </div>
+                )}
+              </div>
+              <AnimatePresence>
+                {showSuggestions && addressSuggestions.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden"
+                  >
+                    {addressSuggestions.map((suggestion, index) => (
+                      <div
+                        key={suggestion.place_id || index}
+                        onClick={() => selectAddress(suggestion)}
+                        className="px-4 py-3 flex items-start gap-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 transition-colors"
+                      >
+                        <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                        <div className="flex flex-col">
+                          <span className="text-sm font-semibold text-slate-700">
+                            {suggestion.address?.road || suggestion.name || suggestion.display_name.split(',')[0]}
+                          </span>
+                          <span className="text-xs text-slate-500 line-clamp-1">
+                            {suggestion.display_name}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="px-3 py-2 bg-slate-50 text-[9px] text-slate-400 text-right">
+                      Powered by OpenStreetMap
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -430,6 +619,43 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             </div>
           </div>
           
+          <div className="space-y-3 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
+            <label className="flex items-center gap-3 sm:gap-4 cursor-pointer group">
+              <div 
+                onClick={() => handleChange('usedTools', !formData.usedTools)}
+                className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${formData.usedTools ? 'bg-[#1A237E] border-[#1A237E]' : 'bg-white border-slate-200'}`}
+              >
+                {formData.usedTools && <Check className="w-4 h-4 text-white" strokeWidth={4} />}
+              </div>
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-600">{toUpperCaseAccentFree('Χρήση Εργαλείων Διάρρηξης')}</span>
+            </label>
+            
+            <AnimatePresence>
+              {formData.usedTools && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="pt-2 pl-11"
+                >
+                  <label className="text-[10px] uppercase tracking-wider text-slate-500 font-black mb-2 block">{toUpperCaseAccentFree('Είδος Εργαλείων')}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {TOOL_TYPES.map(tool => (
+                      <button
+                        key={tool}
+                        type="button"
+                        onClick={() => handleToggleToolType(tool)}
+                        className={`py-2 px-3 sm:py-2 sm:px-4 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${formData.usedToolTypes?.includes(tool) ? 'bg-[#1A237E]/10 border-[#1A237E] text-[#1A237E]' : 'bg-white border-slate-200 text-slate-500'}`}
+                      >
+                        {toUpperCaseAccentFree(tool)}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+          
           <div className="space-y-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <label className="text-[10px] uppercase tracking-wider text-[#1A237E] font-black ml-1">{toUpperCaseAccentFree('Συνδεδεμένες Υποθέσεις')}</label>
@@ -493,7 +719,6 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 py-2">
             {[ 
-              { key: 'usedTools', label: 'Χρήση Εργαλείων (π.χ. λοστός)' },
               { key: 'hasAlarm', label: 'Συναγερμός' },
               { key: 'hasCameras', label: 'Συστήματα CCTV' },
               { key: 'forensicsCalled', label: 'Κλήθηκε ΥΕΕΒΕ' }
@@ -516,11 +741,11 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
         {/* Section: Victim Info */}
         <section className="space-y-6">
           <div className="flex items-center gap-3 text-[#1A237E] font-black text-[10px] uppercase tracking-[0.2em] mb-6">
-            <Phone className="w-4 h-4" /> {toUpperCaseAccentFree('ΣΤΟΙΧΕΙΑ ΠΑΘΟΝΤΟΣ')}
+            <Phone className="w-4 h-4" /> {toUpperCaseAccentFree('ΣΤΟΙΧΕΙΑ ΠΑΘΟΝΤΟΣ & ΜΑΡΤΥΡΑ')}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('Ονοματεπώνυμο')}</label>
+              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('Ονοματεπώνυμο Παθόντος')}</label>
               <input 
                 type="text"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 sm:px-5 sm:py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-medium text-base"
@@ -529,12 +754,32 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('Κινητό Τηλέφωνο')}</label>
+              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('Τηλέφωνο Παθόντος')}</label>
               <input 
                 type="tel"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 sm:px-5 sm:py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-medium text-base"
                 value={formData.victimPhone || ''}
                 onChange={(e) => handleChange('victimPhone', e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-4">
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('Ονοματεπώνυμο Μάρτυρα')}</label>
+              <input 
+                type="text"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 sm:px-5 sm:py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-medium text-base"
+                value={formData.witnessName || ''}
+                onChange={(e) => handleChange('witnessName', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('Τηλέφωνο Μάρτυρα')}</label>
+              <input 
+                type="tel"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 sm:px-5 sm:py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-medium text-base"
+                value={formData.witnessPhone || ''}
+                onChange={(e) => handleChange('witnessPhone', e.target.value)}
               />
             </div>
           </div>
@@ -603,6 +848,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
           </div>
         </section>
         </fieldset>
+        )}
 
         {/* Footer Actions */}
         <div className="pt-6 sm:pt-10 flex flex-col sm:flex-row gap-4 sm:gap-6">
@@ -615,31 +861,105 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
               {toUpperCaseAccentFree('ΚΛΕΙΣΙΜΟ')}
             </button>
           ) : (
-            <>
+            <div className="flex flex-col sm:flex-row w-full gap-4 sm:gap-6">
+              {incident && (
+                <div className="flex items-center gap-2 order-3 sm:order-none w-full sm:w-auto">
+                  <button 
+                    type="button"
+                    onClick={() => setIsDeleteUnlocked(!isDeleteUnlocked)}
+                    className={`flex-none p-4 sm:p-5 rounded-2xl transition-all flex items-center justify-center ${isDeleteUnlocked ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                    title={isDeleteUnlocked ? 'Κλείδωμα Διαγραφής' : 'Ξεκλείδωμα Διαγραφής'}
+                  >
+                    {isDeleteUnlocked ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+                  </button>
+                  <AnimatePresence>
+                    {isDeleteUnlocked && (
+                      <motion.button 
+                        initial={{ opacity: 0, width: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, width: 'auto', scale: 1 }}
+                        exit={{ opacity: 0, width: 0, scale: 0.8 }}
+                        type="button"
+                        onClick={() => setDeleteStep(1)}
+                        className="flex-1 sm:flex-none overflow-hidden whitespace-nowrap bg-red-100 hover:bg-red-200 text-red-600 font-black text-[11px] uppercase tracking-[0.2em] py-4 sm:py-5 px-6 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2"
+                      >
+                        <Trash2 className="w-5 h-5 shrink-0" />
+                        <span className="sm:hidden">ΔΙΑΓΡΑΦΗ</span>
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
               <button 
                 type="button"
                 onClick={incident ? () => setIsReadOnly(true) : onClose}
-                className="w-full sm:flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase tracking-[0.2em] py-4 sm:py-5 rounded-2xl transition-all active:scale-95 outline-none order-2 sm:order-1"
+                className="flex-[1] bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase tracking-[0.2em] py-4 sm:py-5 rounded-2xl transition-all active:scale-95 outline-none order-2 sm:order-1"
               >
                 {toUpperCaseAccentFree('ΑΚΥΡΩΣΗ')}
               </button>
               <button 
                 disabled={loading || Object.values(imageCompressing).some(v => v)}
-                className="w-full sm:flex-[2] bg-[#1A237E] hover:bg-[#1A237E]/90 disabled:opacity-50 text-white font-black text-xs uppercase tracking-[0.2em] py-4 sm:py-5 rounded-2xl transition-all shadow-2xl shadow-[#1A237E]/30 active:scale-95 flex items-center justify-center gap-3 outline-none order-1 sm:order-2"
+                className="flex-[2] bg-[#1A237E] hover:bg-[#1A237E]/90 disabled:opacity-50 text-white font-black text-xs uppercase tracking-[0.2em] py-4 sm:py-5 rounded-2xl transition-all shadow-2xl shadow-[#1A237E]/30 active:scale-95 flex items-center justify-center gap-3 outline-none order-1 sm:order-2 w-full sm:w-auto"
               >
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    <ShieldCheck className="w-5 h-5" />
-                    {incident ? toUpperCaseAccentFree('ΕΝΗΜΕΡΩΣΗ ΕΓΓΡΑΦΗΣ') : toUpperCaseAccentFree('ΟΡΙΣΤΙΚΗ ΚΑΤΑΧΩΡΗΣΗ')}
+                    <ShieldCheck className="w-5 h-5 shrink-0" />
+                    {incident ? <span className="truncate">{toUpperCaseAccentFree('ΕΝΗΜΕΡΩΣΗ')}</span> : <span className="truncate">{toUpperCaseAccentFree('ΚΑΤΑΧΩΡΗΣΗ')}</span>}
                   </>
                 )}
               </button>
-            </>
+            </div>
           )}
         </div>
       </form>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteStep > 0 && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-white/90 backdrop-blur-sm rounded-[24px] sm:rounded-[32px]">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white border border-slate-200 shadow-2xl rounded-3xl p-8 max-w-md w-full text-center"
+            >
+              <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertCircle className="w-10 h-10" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900 mb-3">
+                {deleteStep === 1 ? 'Διαγραφή Συμβάντος' : 'Οριστική Διαγραφή'}
+              </h3>
+              <p className="text-slate-500 text-base mb-8 leading-relaxed">
+                {deleteStep === 1 
+                  ? 'Είστε σίγουροι ότι θέλετε να διαγράψετε αυτό το συμβάν; Η διαδικασία χρειάζεται διπλή επιβεβαίωση.'
+                  : 'ΤΕΛΕΥΤΑΙΑ ΠΡΟΕΙΔΟΠΟΙΗΣΗ: Αυτή η ενέργεια είναι οριστική και δεν μπορεί να αναιρεθεί. Είστε απολύτως σίγουροι;'}
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                      if (deleteStep === 1) setDeleteStep(2);
+                      else handleDelete();
+                  }}
+                  disabled={isDeleting}
+                  className="w-full px-5 py-4 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-bold rounded-xl text-base transition-colors shadow-md disabled:opacity-50"
+                >
+                  {isDeleting ? 'ΔΙΑΓΡΑΦΗ...' : (deleteStep === 1 ? 'ΝΑΙ, ΣΥΝΕΧΕΙΑ ΔΙΑΓΡΑΦΗΣ' : 'ΟΡΙΣΤΙΚΗ ΔΙΑΓΡΑΦΗ')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteStep(0)}
+                  disabled={isDeleting}
+                  className="w-full px-5 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-base transition-colors"
+                >
+                  ΑΚΥΡΩΣΗ
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Fullscreen Image Preview */}
       {fullscreenImage && (

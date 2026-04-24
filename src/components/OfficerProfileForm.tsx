@@ -5,6 +5,7 @@ import { db, auth } from '../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { ShieldCheck, User } from 'lucide-react';
 import { toUpperCaseAccentFree } from '../lib/Typography';
+import { toast } from 'react-hot-toast';
 
 interface OfficerProfileFormProps {
   onComplete: (profile: UserProfile) => void;
@@ -36,8 +37,9 @@ export default function OfficerProfileForm({ onComplete }: OfficerProfileFormPro
 
       await setDoc(doc(db, 'users', auth.currentUser.uid), profile);
       onComplete(profile);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Σφάλμα κατά την αποθήκευση του προφίλ:", err);
+      toast.error(`Αποτυχία ενημέρωσης: ${err?.message || 'Άγνωστο σφάλμα'}`);
     } finally {
       setLoading(false);
     }

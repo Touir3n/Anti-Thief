@@ -36,8 +36,9 @@ export default function App() {
       } else {
         toast.error('Το συμβάν δεν βρέθηκε');
       }
-    } catch (error) {
-      toast.error('Σφάλμα κατά την ανάκτηση');
+    } catch (error: any) {
+      console.error("Σφάλμα κατά την ανάκτηση συμβάντος:", error);
+      toast.error(`Σφάλμα κατά την ανάκτηση: ${error?.message || 'Άγνωστο σφάλμα'}`);
     }
   };
 
@@ -53,8 +54,9 @@ export default function App() {
           } else {
             setUserProfile(null);
           }
-        } catch (err) {
-          console.error("Failed to load profile", err);
+        } catch (err: any) {
+          console.error("Σφάλμα κατά τη φόρτωση προφίλ:", err);
+          toast.error(`Αποτυχία φόρτωσης προφίλ: ${err?.message || 'Άγνωστο σφάλμα'}`);
         } finally {
           setProfileLoading(false);
         }
@@ -133,8 +135,9 @@ export default function App() {
   const handleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error("Login failed", error);
+    } catch (error: any) {
+      console.error("Σφάλμα σύνδεσης:", error);
+      toast.error(`Αποτυχία σύνδεσης: ${error?.message || 'Άγνωστο σφάλμα'}`);
     }
   };
 
@@ -164,10 +167,10 @@ export default function App() {
             <Shield className="text-[#1A237E] w-10 h-10" />
           </div>
           <h1 className="text-4xl font-black mb-2 tracking-tight uppercase leading-none">
-            ANTI<br />THIEF
+            ANTI-THIEF
           </h1>
-          <p className="text-slate-400 mb-10 text-sm font-medium tracking-wide uppercase">
-            {toUpperCaseAccentFree('ΣΥΣΤΗΜΑ ΔΙΑΧΕΙΡΙΣΗΣ v2.4')}
+          <p className="text-slate-400 mb-10 text-[11px] font-bold tracking-widest uppercase">
+            {toUpperCaseAccentFree('Σύστημα Διαχείρισης Περιστατικών Κλοπών')}
           </p>
           <button 
             onClick={handleLogin}
@@ -191,7 +194,12 @@ export default function App() {
               <Shield className="text-white w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <div className="flex flex-col min-w-0 justify-center">
-              <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-none truncate mt-1">ANTI-THIEF</h1>
+              <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-none truncate mt-1">
+                ANTI-THIEF
+              </h1>
+              <p className="text-[10px] sm:text-[11px] text-white/70 font-semibold tracking-wider mt-0.5 truncate hidden sm:block uppercase">
+                {toUpperCaseAccentFree('Σύστημα Διαχείρισης Περιστατικών Κλοπών')}
+              </p>
             </div>
           </div>
           
@@ -226,7 +234,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-12 pb-32">
+      <main className={`flex-1 max-w-7xl w-full mx-auto p-4 sm:p-12 flex flex-col ${view === 'form' ? 'pb-8 sm:pb-12' : 'pb-28 landscape:pb-20 sm:pb-32'}`}>
         <AnimatePresence mode="wait">
           {!userProfile && user && (
             <OfficerProfileForm onComplete={setUserProfile} />
@@ -244,7 +252,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="h-full"
+              className="h-full flex-1"
             >
               <IncidentList 
                 onEdit={(incident) => {
@@ -260,7 +268,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="h-[60vh] sm:h-[calc(100vh-280px)] bg-white rounded-[32px] sm:rounded-[48px] overflow-hidden shadow-xl border border-slate-200"
+              className="h-[75vh] landscape:h-[80vh] sm:h-[calc(100vh-280px)] flex flex-col w-full bg-white rounded-[32px] sm:rounded-[48px] overflow-hidden shadow-xl border border-slate-200 relative z-10"
             >
               <IncidentMap 
                 onEdit={(incident) => {
@@ -276,7 +284,7 @@ export default function App() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -30 }}
-              className="max-w-4xl mx-auto"
+              className="max-w-4xl w-full mx-auto"
             >
               <IncidentForm 
                 key={editingIncident ? editingIncident.id : 'new'}
@@ -294,30 +302,32 @@ export default function App() {
       </main>
 
       {/* Navigation Bar */}
-      <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-2xl border border-slate-200 px-6 sm:px-10 py-5 flex items-center gap-6 sm:gap-12 z-50 max-w-[95vw] sm:max-w-none">
-        <button 
-          onClick={() => { setView('list'); setEditingIncident(null); }}
-          className={`flex flex-col items-center gap-1.5 transition-all ${view === 'list' ? 'text-[#1A237E] scale-110' : 'text-slate-300 hover:text-slate-500'}`}
-        >
-          <List className="w-6 h-6 sm:w-7 sm:h-7" />
-          <span className="text-[8px] sm:text-[9px] uppercase font-black tracking-[0.1em] sm:tracking-[0.2em]">{toUpperCaseAccentFree('ΛΙΣΤΑ')}</span>
-        </button>
-        
-        <button 
-          onClick={() => { setView('form'); setEditingIncident(null); }}
-          className="bg-[#1A237E] hover:bg-[#1A237E]/90 text-white p-4 sm:p-5 rounded-[20px] sm:rounded-[24px] shadow-xl shadow-[#1A237E]/30 active:scale-90 transition-all -mt-10 border-4 border-white"
-        >
-          <Plus className="w-6 h-6 sm:w-8 sm:h-8" />
-        </button>
+      {view !== 'form' && (
+        <nav className="fixed bottom-6 landscape:bottom-2 sm:bottom-8 left-1/2 -translate-x-1/2 bg-white/95 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200/60 px-6 sm:px-10 py-3 landscape:py-1.5 sm:py-5 flex items-center gap-6 sm:gap-12 z-[5000] max-w-[90vw] sm:max-w-none backdrop-blur-md">
+          <button 
+            onClick={() => { setView('list'); setEditingIncident(null); }}
+            className={`flex flex-col items-center gap-1 sm:gap-1.5 transition-all ${view === 'list' ? 'text-[#1A237E] scale-110' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <List className="w-5 h-5 sm:w-7 sm:h-7" />
+            <span className="text-[9px] uppercase font-black tracking-[0.2em] hidden sm:block">{toUpperCaseAccentFree('ΛΙΣΤΑ')}</span>
+          </button>
+          
+          <button 
+            onClick={() => { setView('form'); setEditingIncident(null); }}
+            className="bg-[#1A237E] hover:bg-[#1A237E]/90 text-white p-3 sm:p-5 rounded-xl sm:rounded-3xl shadow-xl shadow-[#1A237E]/30 active:scale-95 transition-all outline-none landscape:-mt-2 sm:-mt-10"
+          >
+            <Plus className="w-5 h-5 sm:w-8 sm:h-8" />
+          </button>
 
-        <button 
-          onClick={() => { setView('map'); setEditingIncident(null); }}
-          className={`flex flex-col items-center gap-1.5 transition-all ${view === 'map' ? 'text-[#1A237E] scale-110' : 'text-slate-300 hover:text-slate-500'}`}
-        >
-          <MapIcon className="w-6 h-6 sm:w-7 sm:h-7" />
-          <span className="text-[8px] sm:text-[9px] uppercase font-black tracking-[0.1em] sm:tracking-[0.2em]">{toUpperCaseAccentFree('ΧΑΡΤΗΣ')}</span>
-        </button>
-      </nav>
+          <button 
+            onClick={() => { setView('map'); setEditingIncident(null); }}
+            className={`flex flex-col items-center gap-1 sm:gap-1.5 transition-all ${view === 'map' ? 'text-[#1A237E] scale-110' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <MapIcon className="w-5 h-5 sm:w-7 sm:h-7" />
+            <span className="text-[9px] uppercase font-black tracking-[0.2em] hidden sm:block">{toUpperCaseAccentFree('ΧΑΡΤΗΣ')}</span>
+          </button>
+        </nav>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ export type Area =
   'Μόδι' | 'Παραλία Βρασνών' | 'Ρεντίνα' | 'Σκεπαστό';
 export type Status = 'Τετελεσμένη' | 'Απόπειρα';
 export type Rank = 'Αστυνόμος Β΄' | 'Υπαστυνόμος Α΄' | 'Υπαστυνόμος Β΄' | 'Ανθυπαστυνόμος' | 'Αρχιφύλακας' | 'Αστυφύλακας';
-export type TheftType = 'Οικία (Κύρια)' | 'Οικία (Εξοχική)' | 'Επιχείρηση' | 'Από όχημα' | 'Κλοπή Αυτοκινήτου' | 'Οχήματος';
+export type TheftType = 'Οικία (Κύρια)' | 'Οικία (Εξοχική)' | 'Επιχείρηση' | 'Από όχημα' | 'Κλοπή Αυτοκινήτου';
 export type StolenItem = 'Ηλεκτρονικά' | 'Κοσμήματα' | 'Μετρητά' | 'Εργαλεία' | 'Άλλο';
 export type SuspectStatus = 'Άγνωστοι' | 'Γνωστοί';
 export type ModusOperandi = 'Ανασφάλιστο' | 'Θραύση υαλοπίνακα' | 'Παραβίαση κλειδαριάς' | 'Διάρρηξη παραθύρου/μπαλκονόπορτας' | 'Χωρίς ίχνη' | 'Άλλο';
@@ -28,6 +28,7 @@ export interface Incident {
   theftType: TheftType;
   modusOperandi: ModusOperandi | string;
   usedTools: boolean;
+  usedToolTypes?: string[];
   toolsDescription: string;
   stolenItems: StolenItem[];
   suspectDetails: SuspectStatus;
@@ -41,7 +42,8 @@ export interface Incident {
   forensicsCalled: boolean;
   victimName: string;
   victimPhone: string;
-  witnesses: string;
+  witnessName: string;
+  witnessPhone: string;
   notes: string;
   photo1: string;
   photo2: string;

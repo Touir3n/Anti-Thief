@@ -7,6 +7,7 @@ import { X, Search, ShieldCheck, MapPin, Calendar, Check } from 'lucide-react';
 import { toUpperCaseAccentFree } from '../lib/Typography';
 import { format } from 'date-fns';
 import { el } from 'date-fns/locale';
+import { toast } from 'react-hot-toast';
 
 interface LinkedIncidentSearchModalProps {
   onClose: () => void;
@@ -30,8 +31,9 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
         const snapshot = await getDocs(q);
         const fetched = snapshot.docs.map(doc => doc.data() as Incident);
         setIncidents(fetched);
-      } catch (err) {
-        console.error('Error fetching incidents for linking:', err);
+      } catch (err: any) {
+        console.error('Σφάλμα κατά την αναζήτηση συμβάντων:', err);
+        toast.error(`Αποτυχία φόρτωσης λίστας συμβάντων: ${err?.message || 'Άγνωστο σφάλμα'}`);
       } finally {
         setLoading(false);
       }

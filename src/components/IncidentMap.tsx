@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { collection, query, onSnapshot, where } from 'firebase/firestore';
@@ -9,6 +9,18 @@ import { format, subWeeks, subMonths, subYears, isAfter } from 'date-fns';
 import { el } from 'date-fns/locale';
 import { Filter, Calendar } from 'lucide-react';
 import { toUpperCaseAccentFree } from '../lib/Typography';
+import { toast } from 'react-hot-toast';
+
+function MapResizer() {
+  const map = useMap();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [map]);
+  return null;
+}
 
 // Fix for Leaflet marker icons in React
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -63,6 +75,9 @@ export default function IncidentMap({ onEdit }: IncidentMapProps) {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Incident));
       setIncidents(data);
+    }, (error) => {
+      console.error("Σφάλμα συγχρονισμού χάρτη:", error);
+      toast.error("Σφάλμα συγχρονισμού χάρτη. Ενδέχεται να εμφανίζονται παλιά δεδομένα.");
     });
 
     return unsubscribe;
@@ -85,9 +100,9 @@ export default function IncidentMap({ onEdit }: IncidentMapProps) {
   }, [incidents, timeRange]);
 
   return (
-    <div className="w-full h-full relative group">
+    <div className="w-full h-full flex flex-col flex-1 relative group bg-slate-50 min-h-[60vh]">
       {/* Time Range Filter Bar */}
-      <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-[1000] flex bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 p-1 shadow-xl sm:p-1.5 sm:shadow-2xl max-w-[90vw] overflow-x-auto no-scrollbar">
+      <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-[1000] flex bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 py-1 px-1 sm:px-1.5 shadow-lg max-w-[90vw] overflow-x-auto no-scrollbar">
         {[
           { id: 'week', label: 'ΕΒΔΟΜΑΔΑ' },
           { id: 'month', label: 'ΜΗΝΑΣ' },
@@ -97,7 +112,7 @@ export default function IncidentMap({ onEdit }: IncidentMapProps) {
           <button
             key={range.id}
             onClick={() => setTimeRange(range.id as TimeRange)}
-            className={`px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[8px] sm:text-[10px] font-black tracking-widest transition-all whitespace-nowrap ${timeRange === range.id ? 'bg-[#1A237E] text-white shadow-lg shadow-[#1A237E]/20' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
+            className={`px-3 sm:px-6 py-2 sm:py-2 rounded-lg text-[10px] sm:text-xs font-semibold transition-all whitespace-nowrap ${timeRange === range.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'}`}
           >
             {toUpperCaseAccentFree(range.label)}
           </button>
@@ -109,7 +124,9 @@ export default function IncidentMap({ onEdit }: IncidentMapProps) {
         zoom={11} 
         scrollWheelZoom={true} 
         className="w-full h-full"
+        style={{ height: '100%', width: '100%' }}
       >
+        <MapResizer />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -121,24 +138,24 @@ export default function IncidentMap({ onEdit }: IncidentMapProps) {
               position={[incident.location.lat, incident.location.lng]}
               icon={incident.status === 'Τετελεσμένη' ? redIcon : orangeIcon}
             >
-              <Popup className="incident-popup">
-                <div className="p-3 min-w-[220px]">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg ${incident.status === 'Τετελεσμένη' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-orange-50 text-orange-600 border border-orange-100'}`}>
+              <Popup className="incident-popup min-w-[240px]">
+                <div className="p-1">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className={`text-[10px] font-semibold uppercase px-2 py-1 rounded-md ${incident.status === 'Τετελεσμένη' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-orange-50 text-orange-600 border border-orange-100'}`}>
                       {toUpperCaseAccentFree(incident.status)}
                     </span>
                   </div>
-                  <h4 className="text-sm font-black text-slate-900 mb-1 uppercase tracking-tight">{toUpperCaseAccentFree(incident.theftType)}</h4>
+                  <h4 className="text-base font-bold text-slate-900 mb-1">{toUpperCaseAccentFree(incident.theftType)}</h4>
                   <div className="flex items-start gap-2 mb-4">
-                    <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
+                    <p className="text-sm text-slate-500 font-medium leading-relaxed">
                       {toUpperCaseAccentFree(incident.area)}, {incident.address}
                     </p>
                   </div>
                   <button 
                     onClick={() => onEdit(incident)}
-                    className="w-full bg-[#1A237E] text-white text-[9px] font-black uppercase tracking-[0.2em] py-3 rounded-xl hover:bg-[#1A237E]/90 transition-all shadow-lg shadow-[#1A237E]/20 active:scale-95 flex items-center justify-center gap-2"
+                    className="w-full bg-blue-600 text-white text-[12px] font-semibold uppercase py-2.5 rounded-lg hover:bg-blue-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
                   >
-                    {toUpperCaseAccentFree('ΛΕΠΤΟΜΕΡΕΙΕΣ')}
+                    ΛΕΠΤΟΜΕΡΕΙΕΣ
                   </button>
                 </div>
               </Popup>
@@ -148,16 +165,16 @@ export default function IncidentMap({ onEdit }: IncidentMapProps) {
       </MapContainer>
 
       {/* Map Legend Overlay */}
-      <div className="absolute bottom-8 left-8 z-[1000] bg-white/95 backdrop-blur-md p-6 rounded-[32px] border border-slate-200 shadow-2xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
-        <h5 className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-300 mb-5">{toUpperCaseAccentFree('ΥΠΟΜΝΗΜΑ ΧΑΡΤΗ')}</h5>
-        <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="w-4 h-4 rounded-full bg-red-500 shadow-lg shadow-red-200 border-2 border-white" />
-            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">{toUpperCaseAccentFree('ΤΕΤΕΛΕΣΜΕΝΗ')}</span>
+      <div className="absolute bottom-8 left-8 z-[1000] bg-white/95 backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
+        <h5 className="text-[11px] font-bold text-slate-500 mb-4 uppercase tracking-wider">ΥΠΟΜΝΗΜΑ</h5>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-3.5 h-3.5 rounded-full bg-red-500 shadow-sm border border-red-600" />
+            <span className="text-xs font-semibold text-slate-700">ΤΕΤΕΛΕΣΜΕΝΗ</span>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="w-4 h-4 rounded-full bg-orange-500 shadow-lg shadow-orange-200 border-2 border-white" />
-            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">{toUpperCaseAccentFree('ΑΠΟΠΕΙΡΑ')}</span>
+          <div className="flex items-center gap-3">
+            <div className="w-3.5 h-3.5 rounded-full bg-orange-500 shadow-sm border border-orange-600" />
+            <span className="text-xs font-semibold text-slate-700">ΑΠΟΠΕΙΡΑ</span>
           </div>
         </div>
       </div>
