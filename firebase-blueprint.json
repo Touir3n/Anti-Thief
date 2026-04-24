@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "Incidents": {
+      "title": "Incident",
+      "description": "A recorded theft or attempted theft incident.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the incident." },
+        "recordedAt": { "type": "string", "format": "date-time", "description": "Timestamp of record creation." },
+        "officerDetails": { "type": "string", "description": "Details of the officer recording the incident." },
+        "occurrenceAt": { "type": "string", "format": "date-time", "description": "Timestamp of the incident occurrence." },
+        "duration": { "type": "string", "description": "Approximate duration or time range." },
+        "area": { "type": "string", "enum": ["Κέντρο", "Αγία Παρασκευή", "Άλλο"], "description": "Geographical area." },
+        "address": { "type": "string", "description": "Specific street address." },
+        "location": { "type": "object", "properties": { "lat": { "type": "number" }, "lng": { "type": "number" } }, "description": "GPS coordinates." },
+        "status": { "type": "string", "enum": ["Τετελεσμένη", "Απόπειρα"], "description": "Final status of the crime." },
+        "theftType": { "type": "string", "enum": ["Οικία (Κύρια)", "Οικία (Εξοχική)", "Επιχείρηση", "Από όχημα", "Οχήματος"], "description": "Type of theft." },
+        "modusOperandi": { "type": "string", "description": "Method used to commit the crime." },
+        "usedTools": { "type": "boolean", "description": "Whether tools were used." },
+        "toolsDescription": { "type": "string", "description": "Description of the tools." },
+        "stolenItems": { "type": "array", "items": { "type": "string", "enum": ["Ηλεκτρονικά", "Κοσμήματα", "Μετρητά", "Άλλο"] }, "description": "List of stolen categories." },
+        "suspectDetails": { "type": "string", "enum": ["Άγνωστοι", "Γνωστοί"], "description": "Status of suspect identity." },
+        "perpetratorDescription": { "type": "string", "description": "Physical description of perpetrators." },
+        "vehicle": { "type": "string", "description": "Vehicle description." },
+        "plateNumber": { "type": "string", "description": "License plate number." },
+        "linkedIncidents": { "type": "string", "description": "Links to other cases." },
+        "hasAlarm": { "type": "boolean", "description": "Was an alarm present?" },
+        "hasCameras": { "type": "boolean", "description": "Was CCTV available?" },
+        "forensicsCalled": { "type": "boolean", "description": "Was UEBE called?" },
+        "victimName": { "type": "string", "description": "Name of the victim." },
+        "victimPhone": { "type": "string", "description": "Phone number of the victim." },
+        "witnesses": { "type": "string", "description": "Witness names or details." },
+        "notes": { "type": "string", "description": "Additional internal notes." },
+        "photo1": { "type": "string", "description": "Base64 or URL for first photo." },
+        "photo2": { "type": "string", "description": "Base64 or URL for second photo." },
+        "createdBy": { "type": "string", "description": "User ID of the creator." }
+      },
+      "required": ["id", "recordedAt", "createdBy"]
+    }
+  },
+  "firestore": {
+    "/incidents/{incidentId}": {
+      "schema": "Incidents",
+      "description": "Collection of theft incidents."
+    }
+  }
+}

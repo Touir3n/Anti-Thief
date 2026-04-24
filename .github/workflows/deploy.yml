@@ -1,0 +1,56 @@
+# Απλό workflow για ανάπτυξη της ιστοσελίδας στο GitHub Pages
+name: Deploy static content to Pages
+
+on:
+  # Τρέχει κάθε φορά που κάνετε push στο main branch
+  push:
+    branches: ["main"]
+  # Σας επιτρέπει να το τρέξετε και χειροκίνητα αν χρειαστεί
+  workflow_dispatch:
+
+# Δικαιώματα για το GITHUB_TOKEN
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Επιτρέπει μόνο μία ανάπτυξη τη φορά
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Single deploy job since we're just deploying
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Ο φάκελος build του Vite
+          path: './dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

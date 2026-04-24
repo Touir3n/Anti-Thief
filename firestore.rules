@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation helper for Incident
+    function isValidIncident(data) {
+      return (data.get('id', null) == null || (data.id is string && data.id.size() <= 128)) &&
+             (data.get('recordedAt', null) == null || data.recordedAt is timestamp) &&
+             (data.get('createdBy', null) == null || data.createdBy is string) &&
+             (data.get('theftType', null) == null || data.theftType in ['Οικία (Κύρια)', 'Οικία (Εξοχική)', 'Επιχείρηση', 'Από όχημα', 'Κλοπή Αυτοκινήτου', 'Οχήματος']) &&
+             (data.get('status', null) == null || data.status in ['Τετελεσμένη', 'Απόπειρα']) &&
+             (data.get('area', null) == null || data.area in [
+               'Ασπροβάλτα', 'Σταυρός', 'Νέα Βρασνά', 'Νέα Μάδυτος',
+               'Ανοιξιά', 'Απολλωνία', 'Αρέθουσα', 'Βαμβακιά', 'Βρασνά', 
+               'Κοκκαλού', 'Λίμνη', 'Μαυρούδα', 'Μεγάλη Βόλβη', 'Μικρή Βόλβη', 
+               'Μόδι', 'Παραλία Βρασνών', 'Ρεντίνα', 'Σκεπαστό'
+             ]) &&
+             (data.get('address', null) == null || (data.address is string && data.address.size() <= 1000)) &&
+             (data.get('modusOperandi', null) == null || (data.modusOperandi is string && data.modusOperandi.size() <= 2000)) &&
+             (data.get('notes', null) == null || (data.notes is string && data.notes.size() <= 6000)) &&
+             (data.get('location', null) == null || (data.location is map && data.location.lat is number && data.location.lng is number)) &&
+             (data.get('creatorName', null) == null || (data.creatorName is string && data.creatorName.size() <= 1000)) &&
+             (data.get('creatorRank', null) == null || (data.creatorRank is string && data.creatorRank.size() <= 1000)) &&
+             (data.get('updatedBy', null) == null || data.updatedBy is string) &&
+             (data.get('updatedByName', null) == null || (data.updatedByName is string && data.updatedByName.size() <= 1000)) &&
+             (data.get('updatedByRank', null) == null || (data.updatedByRank is string && data.updatedByRank.size() <= 1000)) &&
+             (data.get('updatedAt', null) == null || data.updatedAt is timestamp) &&
+             (data.get('vehicle', null) == null || (data.vehicle is string && data.vehicle.size() <= 1000)) &&
+             (data.get('plateNumber', null) == null || (data.plateNumber is string && data.plateNumber.size() <= 1000)) &&
+             (data.get('suspectNames', null) == null || (data.suspectNames is string && data.suspectNames.size() <= 2000)) &&
+             (data.get('perpetratorDescription', null) == null || (data.perpetratorDescription is string && data.perpetratorDescription.size() <= 3000)) &&
+             (data.get('linkedIncidents', null) == null || (data.linkedIncidents is string && data.linkedIncidents.size() <= 2000));
+    }
+
+    match /users/{userId} {
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /incidents/{incidentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && incoming().createdBy == request.auth.uid;
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+    }
+  }
+}
