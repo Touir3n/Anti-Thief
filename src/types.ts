@@ -1,7 +1,7 @@
 export type Area = string;
 export type Status = 'Τετελεσμένη' | 'Απόπειρα';
 export type Rank = 'Αστυνόμος Β΄' | 'Υπαστυνόμος Α΄' | 'Υπαστυνόμος Β΄' | 'Ανθυπαστυνόμος' | 'Αρχιφύλακας' | 'Αστυφύλακας';
-export type TheftType = 'Οικίας' | 'Επιχείρησης' | 'Κλοπή από όχημα' | 'Κλοπή οχήματος';
+export type TheftType = 'Οικίας' | 'Εξοχικό' | 'Επιχείρησης' | 'Κλοπή από όχημα' | 'Κλοπή οχήματος' | 'Ληστεία';
 export type StolenItem = 'Ηλεκτρονικά' | 'Κοσμήματα' | 'Μετρητά' | 'Εργαλεία' | 'Άλλο';
 export type SuspectStatus = 'Άγνωστοι' | 'Γνωστοί';
 export type ModusOperandi = string;
@@ -48,6 +48,7 @@ export interface Incident {
   notes: string;
   photo1: string;
   photo2: string;
+  photo3?: string;
   createdBy: string;
   creatorName?: string;
   creatorRank?: string;

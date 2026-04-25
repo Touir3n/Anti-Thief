@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { db, auth, storage, handleFirestoreError } from '../firebase';
-import { doc, setDoc, updateDoc, serverTimestamp, getDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, serverTimestamp, getDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Incident, Area, Status, TheftType, StolenItem, SuspectStatus, ModusOperandi, UserProfile } from '../types';
-import { X, Check, MapPin, Camera, AlertTriangle, ShieldCheck, User as UserIcon, Phone, Clock, FileText, Loader2, Lock, Unlock, Trash2, AlertCircle, Home, Store, CarFront, Car } from 'lucide-react';
+import { X, Check, MapPin, Camera, AlertTriangle, ShieldCheck, User as UserIcon, Phone, Clock, FileText, Loader2, Lock, Unlock, Trash2, AlertCircle, Home, Store, CarFront, Car, TreePalm, Crosshair } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { toUpperCaseAccentFree } from '../lib/Typography';
@@ -22,14 +22,16 @@ import LinkedIncidentSearchModal from './LinkedIncidentSearchModal';
 import IncidentReadOnlyView from './IncidentReadOnlyView';
 import ManualMapSelection from './ManualMapSelection';
 import { LinkedIncidentTag } from './LinkedIncidentTag';
-import { PREDEFINED_AREAS, AREAS, MO_HOUSE, MO_VEHICLE, THEFT_TYPES, STOLEN_ITEMS, CAR_CATEGORIES } from '../constants';
+import { PREDEFINED_AREAS, AREAS, MO_HOUSE, MO_VEHICLE, MO_ROBBERY, THEFT_TYPES, STOLEN_ITEMS, CAR_CATEGORIES } from '../constants';
 
 const STATUSES: Status[] = ['Τετελεσμένη', 'Απόπειρα'];
 const THEFT_ICONS = {
-  'Οικίας': <Home className="w-5 h-5 mb-1" />,
-  'Επιχείρησης': <Store className="w-5 h-5 mb-1" />,
-  'Κλοπή από όχημα': <CarFront className="w-5 h-5 mb-1" />,
-  'Κλοπή οχήματος': <Car className="w-5 h-5 mb-1" />
+  'Οικίας': <Home className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
+  'Εξοχικό': <TreePalm className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
+  'Επιχείρησης': <Store className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
+  'Κλοπή από όχημα': <CarFront className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
+  'Κλοπή οχήματος': <Car className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
+  'Ληστεία': <Crosshair className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />
 };
 
 export default function IncidentForm({ incident, userProfile, onClose, onOpenIncident, allIncidents }: IncidentFormProps) {
@@ -38,6 +40,8 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
   const [photoFiles, setPhotoFiles] = useState<{ [key: string]: File | null }>({});
   const [photoPreviews, setPhotoPreviews] = useState<{ [key: string]: string }>({
     photo1: incident?.photo1 || '',
+    photo2: incident?.photo2 || '',
+    photo3: incident?.photo3 || '',
   });
   const [imageCompressing, setImageCompressing] = useState<{ [key: string]: boolean }>({});
   const [showLinkedModal, setShowLinkedModal] = useState(false);
@@ -46,6 +50,8 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
   const [deleteStep, setDeleteStep] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeleteUnlocked, setIsDeleteUnlocked] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 4;
 
   const handleDelete = async () => {
     if (!incident) return;
@@ -270,7 +276,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
 
       // Convert photos to base64 and store directly in Firestore
       // Since we heavily compress them, they will fit inside the 1MB document limit.
-      for (const key of ['photo1']) {
+      for (const key of ['photo1', 'photo2', 'photo3']) {
         const file = photoFiles[key];
         if (file) {
           try {
@@ -292,6 +298,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
         delete updateData.recordedAt;
         
         const timestamp = serverTimestamp();
+        const historyTimestamp = Timestamp.now();
         
         updateData.updatedBy = auth.currentUser.uid;
         updateData.updatedByName = userProfile ? `${userProfile.lastName} ${userProfile.firstName}`.trim() : userProfile?.lastName || auth.currentUser.displayName || '';
@@ -304,7 +311,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
           updatedBy: updateData.updatedBy,
           updatedByName: updateData.updatedByName,
           updatedByRank: updateData.updatedByRank,
-          updatedAt: timestamp
+          updatedAt: historyTimestamp
         }];
 
         // If there was previously an updatedBy but no array, backfill the array
@@ -400,9 +407,20 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             <AlertTriangle className="text-white w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
-            <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight leading-none">
-              {incident ? (isReadOnly ? toUpperCaseAccentFree('ΣΥΜΒΑΝ') : toUpperCaseAccentFree('ΕΠΕΞΕΡΓΑΣΙΑ')) : toUpperCaseAccentFree(`ΝΕΑ ΚΑΤΑΧΩΡΙΣΗ ΚΛΟΠΗΣ ΑΠΟ ${userProfile?.rank || ''} ${userProfile?.lastName || ''}`.trim())}
+            <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-none mb-1 text-white">
+              {incident ? (isReadOnly ? 'ΛΕΠΤΟΜΕΡΕΙΕΣ ΣΥΜΒΑΝΤΟΣ' : 'ΕΠΕΞΕΡΓΑΣΙΑ ΣΥΜΒΑΝΤΟΣ') : 'ΝΕΑ ΚΑΤΑΧΩΡΙΣΗ ΚΛΟΠΗΣ'}
             </h2>
+            {!incident && userProfile && (
+              <span className="text-[11px] sm:text-xs font-bold text-blue-200 uppercase tracking-widest block mt-1.5">
+                {userProfile.rank} {userProfile.lastName}
+              </span>
+            )}
+            {incident && (
+              <span className="text-[11px] sm:text-xs font-bold text-blue-200 uppercase tracking-widest block mt-1.5 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                ΚΑΤΑΧΩΡΗΘΗΚΕ: {incident.recordedAt ? new Date(incident.recordedAt).toLocaleDateString('el-GR') : ''}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -451,7 +469,20 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
           <IncidentReadOnlyView incident={formData} setFullscreenImage={setFullscreenImage} onOpenIncident={onOpenIncident} />
         ) : (
           <fieldset className="min-w-0 border-0 p-0 m-0 space-y-8 sm:space-y-10">
+            {/* Stepper Header */}
+            <div className="flex flex-col gap-2 mb-8">
+              <div className="flex items-center justify-between text-xs font-black text-slate-400 uppercase tracking-wider px-1">
+                <span>{toUpperCaseAccentFree('ΒΗΜΑ')} {currentStep} {toUpperCaseAccentFree('ΑΠΟ')} {totalSteps}</span>
+              </div>
+              <div className="flex gap-2">
+                {[...Array(totalSteps)].map((_, i) => (
+                  <div key={i} className={`h-2 flex-1 rounded-full transition-colors ${i + 1 <= currentStep ? 'bg-[#1A237E]' : 'bg-slate-200'}`} />
+                ))}
+              </div>
+            </div>
+
         {/* Section: Basic Info */}
+        {currentStep === 1 && (
         <section className="space-y-6">
           <div className="flex items-center gap-3 text-[#1A237E] font-black text-[10px] uppercase tracking-[0.2em] mb-6">
             <Clock className="w-4 h-4" /> {toUpperCaseAccentFree('ΧΡΟΝΙΚΑ & ΤΟΠΙΚΑ ΣΤΟΙΧΕΙΑ')}
@@ -516,9 +547,11 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
                     key={type}
                     type="button"
                     onClick={() => handleChange('theftType', type)}
-                    className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all border-2 ${formData.theftType === type ? 'bg-[#1A237E]/10 border-[#1A237E] text-[#1A237E]' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all border-2 group ${formData.theftType === type ? 'bg-[#1A237E]/10 border-[#1A237E] text-[#1A237E]' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
                   >
-                    {THEFT_ICONS[type as keyof typeof THEFT_ICONS]}
+                    {React.cloneElement(THEFT_ICONS[type as keyof typeof THEFT_ICONS] as React.ReactElement<any>, {
+                      className: `w-5 h-5 mb-1 transition-colors ${formData.theftType === type ? 'text-[#1A237E]' : 'text-slate-400 group-hover:text-slate-600'}`
+                    })}
                     <span className="text-[10px] font-black uppercase tracking-widest mt-1 text-center leading-tight">{toUpperCaseAccentFree(type)}</span>
                   </button>
                 ))}
@@ -664,10 +697,10 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             </div>
           </div>
         </section>
-
-        <hr className="border-slate-100" />
+        )}
 
         {/* Section: Perpetrator Details */}
+        {currentStep === 2 && (
         <section className="space-y-6">
           <div className="flex items-center gap-3 text-[#1A237E] font-black text-[10px] uppercase tracking-[0.2em] mb-6">
             <UserIcon className="w-4 h-4" /> {toUpperCaseAccentFree('ΣΤΟΙΧΕΙΑ ΔΡΑΣΤΩΝ & ΤΡΟΠΟΣ ΤΕΛΕΣΗΣ')}
@@ -736,7 +769,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
                   onChange={(e) => handleChange('modusOperandi', e.target.value)}
                 >
                   <option value="" disabled>Επιλέξτε τρόπο...</option>
-                  {(formData.theftType === 'Κλοπή από όχημα' ? MO_VEHICLE : MO_HOUSE).map(mo => (
+                  {(formData.theftType === 'Ληστεία' ? MO_ROBBERY : (formData.theftType === 'Κλοπή από όχημα' ? MO_VEHICLE : MO_HOUSE)).map(mo => (
                     <option key={mo} value={mo}>{toUpperCaseAccentFree(mo)}</option>
                   ))}
                 </select>
@@ -796,7 +829,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
                 <button
                   key={item}
                   type="button"
-                  onClick={() => handleToggleStolen(item)}
+                  onClick={() => handleToggleStolen(item as StolenItem)}
                   className={`py-2 px-4 sm:py-3 sm:px-6 rounded-full border text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition-all ${formData.stolenItems?.includes(item) ? 'bg-[#1A237E]/10 border-[#1A237E] text-[#1A237E]' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
                 >
                   {toUpperCaseAccentFree(item)}
@@ -823,10 +856,10 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             ))}
           </div>
         </section>
-
-        <hr className="border-slate-100" />
+        )}
 
         {/* Section: Victim Info */}
+        {currentStep === 3 && (
         <section className="space-y-6">
           <div className="flex items-center gap-3 text-[#1A237E] font-black text-[10px] uppercase tracking-[0.2em] mb-6">
             <Phone className="w-4 h-4" /> {toUpperCaseAccentFree('ΣΤΟΙΧΕΙΑ ΠΑΘΟΝΤΟΣ & ΜΑΡΤΥΡΑ')}
@@ -872,10 +905,10 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             </div>
           </div>
         </section>
-
-        <hr className="border-slate-100" />
+        )}
 
         {/* Section: Photos & Notes */}
+        {currentStep === 4 && (
         <section className="space-y-6">
           <div className="flex items-center gap-3 text-[#1A237E] font-black text-[10px] uppercase tracking-[0.2em] mb-6">
             <FileText className="w-4 h-4" /> {toUpperCaseAccentFree('ΠΑΡΑΤΗΡΗΣΕΙΣ - ΕΣΩΤΕΡΙΚΕΣ ΣΗΜΕΙΩΣΕΙΣ')}
@@ -891,47 +924,51 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-6">
-            <div 
-              className="relative aspect-video max-h-[300px] w-full bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center gap-3 text-slate-300 hover:text-[#1A237E] hover:border-[#1A237E] hover:bg-[#1A237E]/5 transition-all group overflow-hidden"
-            >
-              {photoPreviews['photo1'] ? (
-                <>
-                  <img 
-                    src={photoPreviews['photo1']} 
-                    alt="Preview" 
-                    className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                    onClick={() => setFullscreenImage(photoPreviews['photo1'])}
-                  />
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); clearPhoto('photo1'); }}
-                    className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full shadow-lg z-50 transition-transform active:scale-95"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                  {imageCompressing['photo1'] && (
-                    <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center z-10 pointer-events-none">
-                      <Loader2 className="w-8 h-8 text-[#1A237E] animate-spin mb-2" />
-                      <span className="text-[9px] font-black uppercase tracking-widest text-[#1A237E] bg-white px-2 py-1 rounded-md">{toUpperCaseAccentFree('ΣΥΜΠΙΕΣΗ...')}</span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={(e) => handleFileChange(e, 'photo1')} 
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50" 
-                  />
-                  <Camera className="w-10 h-10 transition-transform group-hover:scale-110 pointer-events-none" />
-                  <span className="text-[9px] font-black uppercase tracking-[0.2em] pointer-events-none">{toUpperCaseAccentFree('ΛΗΨΗ ΦΩΤΟΓΡΑΦΙΑΣ')}</span>
-                </>
-              )}
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {['photo1', 'photo2', 'photo3'].map((photoKey, index) => (
+              <div 
+                key={photoKey}
+                className="relative aspect-video lg:aspect-[4/3] max-h-[300px] w-full bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center gap-3 text-slate-300 hover:text-[#1A237E] hover:border-[#1A237E] hover:bg-[#1A237E]/5 transition-all group overflow-hidden"
+              >
+                {photoPreviews[photoKey] ? (
+                  <>
+                    <img 
+                      src={photoPreviews[photoKey]} 
+                      alt="Preview" 
+                      className="w-full h-full object-cover cursor-pointer hover:opacity-90"
+                      onClick={() => setFullscreenImage(photoPreviews[photoKey])}
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); clearPhoto(photoKey); }}
+                      className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full shadow-lg z-50 transition-transform active:scale-95"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    {imageCompressing[photoKey] && (
+                      <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center z-10 pointer-events-none">
+                        <Loader2 className="w-8 h-8 text-[#1A237E] animate-spin mb-2" />
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[#1A237E] bg-white px-2 py-1 rounded-md">{toUpperCaseAccentFree('ΣΥΜΠΙΕΣΗ...')}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => handleFileChange(e, photoKey)} 
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50" 
+                    />
+                    <Camera className="w-10 h-10 transition-transform group-hover:scale-110 pointer-events-none" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] pointer-events-none">{toUpperCaseAccentFree(`ΛΗΨΗ ΦΩΤΟΓΡΑΦΙΑΣ ${index + 1}`)}</span>
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         </section>
+        )}
         </fieldset>
         )}
 
@@ -950,24 +987,43 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
               <div className="flex flex-col sm:flex-row w-full gap-4 sm:gap-6">
                 <button 
                   type="button"
-                  onClick={incident ? () => setIsReadOnly(true) : onClose}
+                  onClick={() => {
+                    if (currentStep > 1) {
+                      setCurrentStep(prev => prev - 1);
+                    } else {
+                      incident ? setIsReadOnly(true) : onClose();
+                    }
+                  }}
                   className="flex-[1] bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase tracking-[0.2em] py-4 sm:py-5 rounded-2xl transition-all active:scale-95 outline-none order-2 sm:order-1"
                 >
-                  {toUpperCaseAccentFree('ΑΚΥΡΩΣΗ')}
+                  {toUpperCaseAccentFree(currentStep > 1 ? 'ΠΙΣΩ' : 'ΑΚΥΡΩΣΗ')}
                 </button>
-                <button 
-                  disabled={loading || Object.values(imageCompressing).some(v => v)}
-                  className="flex-[2] bg-[#1A237E] hover:bg-[#1A237E]/90 disabled:opacity-50 text-white font-black text-xs uppercase tracking-[0.2em] py-4 sm:py-5 rounded-2xl transition-all shadow-2xl shadow-[#1A237E]/30 active:scale-95 flex items-center justify-center gap-3 outline-none order-1 sm:order-2 w-full sm:w-auto"
-                >
-                  {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <ShieldCheck className="w-5 h-5 shrink-0" />
-                      {incident ? <span className="truncate">{toUpperCaseAccentFree('ΕΝΗΜΕΡΩΣΗ')}</span> : <span className="truncate">{toUpperCaseAccentFree('ΚΑΤΑΧΩΡΗΣΗ')}</span>}
-                    </>
-                  )}
-                </button>
+                {currentStep < totalSteps ? (
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                       e.preventDefault();
+                       setCurrentStep(prev => prev + 1);
+                    }}
+                    className="flex-[2] bg-[#1A237E] hover:bg-[#1A237E]/90 text-white font-black text-xs uppercase tracking-[0.2em] py-4 sm:py-5 rounded-2xl transition-all shadow-2xl shadow-[#1A237E]/30 active:scale-95 flex items-center justify-center gap-3 outline-none order-1 sm:order-2 w-full sm:w-auto"
+                  >
+                    <span className="truncate">{toUpperCaseAccentFree('ΕΠΟΜΕΝΟ')}</span>
+                  </button>
+                ) : (
+                  <button 
+                    disabled={loading || Object.values(imageCompressing).some(v => v)}
+                    className="flex-[2] bg-[#1A237E] hover:bg-[#1A237E]/90 disabled:opacity-50 text-white font-black text-xs uppercase tracking-[0.2em] py-4 sm:py-5 rounded-2xl transition-all shadow-2xl shadow-[#1A237E]/30 active:scale-95 flex items-center justify-center gap-3 outline-none order-1 sm:order-2 w-full sm:w-auto"
+                  >
+                    {loading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-5 h-5 shrink-0" />
+                        {incident ? <span className="truncate">{toUpperCaseAccentFree('ΕΝΗΜΕΡΩΣΗ')}</span> : <span className="truncate">{toUpperCaseAccentFree('ΚΑΤΑΧΩΡΗΣΗ')}</span>}
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -978,10 +1034,10 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
                 <button 
                   type="button"
                   onClick={() => setIsDeleteUnlocked(!isDeleteUnlocked)}
-                  className={`flex-none p-4 rounded-2xl transition-all flex items-center justify-center ${isDeleteUnlocked ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-                  title={isDeleteUnlocked ? 'Κλείδωμα Διαγραφής' : 'Ξεκλείδωμα Διαγραφής (Σύρετε δεξιά για διαγραφή →)'}
+                  className={`flex-none p-4 rounded-2xl transition-all flex items-center justify-center ${isDeleteUnlocked ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-slate-50 text-red-400 hover:bg-slate-100'}`}
+                  title={isDeleteUnlocked ? 'Ακύρωση Διαγραφής' : 'Εμφάνιση Επιλογής Διαγραφής'}
                 >
-                  {isDeleteUnlocked ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+                  {isDeleteUnlocked ? <X className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
                 </button>
                 <AnimatePresence>
                   {isDeleteUnlocked && (

@@ -53,7 +53,6 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
-      (inc.id?.toLowerCase() || '').includes(q) ||
       inc.area.toLowerCase().includes(q) ||
       inc.theftType.toLowerCase().includes(q) ||
       (inc.address?.toLowerCase() || '').includes(q)
@@ -86,7 +85,7 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
             <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 transform -translate-y-1/2" />
             <input 
               type="text"
-              placeholder="Αναζήτηση με ID, Περιοχή, Είδος Κλοπής..."
+              placeholder="Αναζήτηση με Περιοχή, Είδος Κλοπής..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl pl-12 pr-4 py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-bold"
@@ -106,30 +105,30 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
                 <div 
                   key={incident.id}
                   onClick={() => incident.id && onSelect(incident.id)}
-                  className={`bg-white p-4 sm:p-5 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group ${
+                  className={`p-4 sm:p-5 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group ${
                     isSelected 
-                      ? 'border-[#1A237E] bg-[#1A237E] shadow-lg shadow-[#1A237E]/20' 
-                      : 'border-slate-100 hover:border-[#1A237E]/20 hover:bg-slate-50'
+                      ? 'border-blue-600 bg-blue-50 shadow-md shadow-blue-900/5' 
+                      : 'bg-white border-slate-100 hover:border-blue-900/20 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex-1 min-w-0 pr-4">
                     <div className="flex items-center gap-3 mb-2">
                       <span className={`text-[10px] sm:text-xs font-black uppercase tracking-widest px-2 sm:px-3 py-1 rounded-lg ${
-                        isSelected ? 'bg-white/20 text-white' : 'bg-[#1A237E]/10 text-[#1A237E]'
+                        isSelected ? 'bg-blue-600 text-white' : 'bg-blue-900/10 text-blue-900'
                       }`}>
                         {incident.id?.split('-')[1] || incident.id}
                       </span>
-                      <span className={`text-xs sm:text-sm font-bold uppercase truncate ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                      <span className={`text-xs sm:text-sm font-bold uppercase truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
                         {toUpperCaseAccentFree(incident.theftType)}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                      <div className={`flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider ${isSelected ? 'text-white/80' : 'text-slate-500'}`}>
+                      <div className={`flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider ${isSelected ? 'text-blue-800' : 'text-slate-500'}`}>
                         <MapPin className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{incident.area}{incident.address ? `, ${incident.address}` : ''}</span>
                       </div>
                       {incident.incidentDate && (
-                        <div className={`flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider ${isSelected ? 'text-white/80' : 'text-slate-500'}`}>
+                        <div className={`flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider ${isSelected ? 'text-blue-800' : 'text-slate-500'}`}>
                           <Calendar className="w-3.5 h-3.5 shrink-0" />
                           <span>{format(new Date(incident.incidentDate), "d MMM yy", { locale: el })}</span>
                         </div>
@@ -138,8 +137,8 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
                   </div>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2 transition-colors ${
                     isSelected 
-                      ? 'bg-white border-white text-[#1A237E]' 
-                      : 'border-slate-200 group-hover:border-[#1A237E]/30 bg-slate-50 text-slate-300'
+                      ? 'bg-blue-600 border-blue-600 text-white' 
+                      : 'border-slate-200 group-hover:border-blue-900/30 bg-slate-50 text-slate-300'
                   }`}>
                     {isSelected ? <Check className="w-4 h-4 font-bold" /> : <div className="w-2.5 h-2.5 rounded-full bg-slate-200" />}
                   </div>

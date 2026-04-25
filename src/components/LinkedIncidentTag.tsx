@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { toUpperCaseAccentFree } from '../lib/Typography';
-import { Home, Store, CarFront, Car } from 'lucide-react';
+import { Home, Store, CarFront, Car, Umbrella, Crosshair } from 'lucide-react';
 
 interface LinkedIncidentTagProps {
   id: string;
@@ -38,8 +38,10 @@ export const LinkedIncidentTag: React.FC<LinkedIncidentTagProps> = ({ id, onOpen
               switch (data.theftType) {
                 case 'Οικίας':
                 case 'Οικία (Κύρια)':
-                case 'Οικία (Εξοχική)':
                   return <><Home className={iconClass} /> {toUpperCaseAccentFree(data.theftType)}</>;
+                case 'Εξοχικό':
+                case 'Οικία (Εξοχική)':
+                  return <><Umbrella className={iconClass} /> {toUpperCaseAccentFree(data.theftType)}</>;
                 case 'Επιχείρησης':
                 case 'Επιχείρηση':
                   return <><Store className={iconClass} /> {toUpperCaseAccentFree(data.theftType)}</>;
@@ -49,6 +51,8 @@ export const LinkedIncidentTag: React.FC<LinkedIncidentTagProps> = ({ id, onOpen
                 case 'Κλοπή οχήματος':
                 case 'Κλοπή Αυτοκινήτου':
                   return <><Car className={iconClass} /> {toUpperCaseAccentFree(data.theftType)}</>;
+                case 'Ληστεία':
+                  return <><Crosshair className={iconClass} /> {toUpperCaseAccentFree(data.theftType)}</>;
                 default: return toUpperCaseAccentFree(data.theftType || '');
               }
             })()}

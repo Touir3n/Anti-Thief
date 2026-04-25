@@ -2,14 +2,15 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError } from '../firebase';
 import { Incident } from '../types';
-import { Search, Filter, Calendar, MapPin, ChevronRight, AlertTriangle, CheckCircle, Plus, Trash2, AlertCircle, X, LayoutGrid, LayoutList, Clock, Home, Store, CarFront, Car, Camera } from 'lucide-react';
+import { Search, Filter, Calendar, MapPin, ChevronRight, AlertTriangle, CheckCircle, Plus, Trash2, AlertCircle, X, LayoutGrid, LayoutList, Clock, Home, Store, CarFront, Car, Camera, TreePalm, Crosshair } from 'lucide-react';
 import { format } from 'date-fns';
 import { el } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { toUpperCaseAccentFree } from '../lib/Typography';
 import { toast } from 'react-hot-toast';
+import SingleSelect from './SingleSelect';
 import MultiSelect from './MultiSelect';
-import { MUNICIPALITIES, THEFT_TYPES, MO_HOUSE, MO_VEHICLE, TYPE_COLORS, TYPE_BADGE_COLORS } from '../constants';
+import { MUNICIPALITIES, THEFT_TYPES, MO_HOUSE, MO_VEHICLE, MO_ROBBERY, TYPE_COLORS, TYPE_BADGE_COLORS } from '../constants';
 
 interface IncidentListProps {
   onEdit: (incident: Incident) => void;
@@ -17,15 +18,47 @@ interface IncidentListProps {
   loading: boolean;
 }
 
+const getInitialState = (key: string, fallback: any) => {
+  const saved = sessionStorage.getItem(key);
+  return saved ? JSON.parse(saved) : fallback;
+};
+
 export default function IncidentList({ onEdit, incidents, loading }: IncidentListProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterAreas, setFilterAreas] = useState<string[]>([]);
-  const [filterTypes, setFilterTypes] = useState<string[]>([]);
-  const [filterMOs, setFilterMOs] = useState<string[]>([]);
-  const [dateFilterMode, setDateFilterMode] = useState('All');
-  const [customMonthStart, setCustomMonthStart] = useState('');
-  const [customMonthEnd, setCustomMonthEnd] = useState('');
-  const [viewMode, setViewMode] = useState<'detailed' | 'compact'>('detailed');
+  const [searchTerm, setSearchTerm] = useState(() => getInitialState('list_searchTerm', ''));
+  const [filterAreas, setFilterAreas] = useState<string[]>(() => getInitialState('list_filterAreas', []));
+  const [filterTypes, setFilterTypes] = useState<string[]>(() => getInitialState('list_filterTypes', []));
+  const [filterMOs, setFilterMOs] = useState<string[]>(() => getInitialState('list_filterMOs', []));
+  const [dateFilterMode, setDateFilterMode] = useState(() => getInitialState('list_dateFilterMode', 'All'));
+  const [customMonthStart, setCustomMonthStart] = useState(() => getInitialState('list_customMonthStart', ''));
+  const [customMonthEnd, setCustomMonthEnd] = useState(() => getInitialState('list_customMonthEnd', ''));
+  const [viewMode, setViewMode] = useState<'detailed' | 'compact'>(() => getInitialState('list_viewMode', 'detailed'));
+  const [displayLimit, setDisplayLimit] = useState(5);
+
+  useEffect(() => {
+    sessionStorage.setItem('list_searchTerm', JSON.stringify(searchTerm));
+    sessionStorage.setItem('list_filterAreas', JSON.stringify(filterAreas));
+    sessionStorage.setItem('list_filterTypes', JSON.stringify(filterTypes));
+    sessionStorage.setItem('list_filterMOs', JSON.stringify(filterMOs));
+    sessionStorage.setItem('list_dateFilterMode', JSON.stringify(dateFilterMode));
+    sessionStorage.setItem('list_customMonthStart', JSON.stringify(customMonthStart));
+    sessionStorage.setItem('list_customMonthEnd', JSON.stringify(customMonthEnd));
+    sessionStorage.setItem('list_viewMode', JSON.stringify(viewMode));
+  }, [searchTerm, filterAreas, filterTypes, filterMOs, dateFilterMode, customMonthStart, customMonthEnd, viewMode]);
+
+  useEffect(() => {
+    // Reset limit when filters change
+    setDisplayLimit(5);
+  }, [searchTerm, filterAreas, filterTypes, filterMOs, dateFilterMode, customMonthStart, customMonthEnd]);
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setFilterAreas([]);
+    setFilterTypes([]);
+    setFilterMOs([]);
+    setDateFilterMode('All');
+    setCustomMonthStart('');
+    setCustomMonthEnd('');
+  };
 
   const recordedAreas = useMemo(() => {
     const areas = new Set<string>();
@@ -66,14 +99,18 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
     
     let options: {label: string, value: string}[] = [];
     
-    const hasHouse = types.includes('Οικίας') || types.includes('Επιχείρησης');
+    const hasHouse = types.includes('Οικίας') || types.includes('Εξοχικό') || types.includes('Επιχείρησης');
     const hasVehicle = types.includes('Κλοπή από όχημα') || types.includes('Κλοπή οχήματος');
+    const hasRobbery = types.includes('Ληστεία');
     
     if (hasHouse) {
       MO_HOUSE.forEach(mo => options.push({ label: mo, value: mo }));
     }
     if (hasVehicle) {
       MO_VEHICLE.forEach(mo => options.push({ label: mo, value: mo }));
+    }
+    if (hasRobbery) {
+      MO_ROBBERY.forEach(mo => options.push({ label: mo, value: mo }));
     }
     
     return options;
@@ -91,10 +128,36 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
   }, [moOptions, filterMOs]);
 
   const filteredIncidents = incidents.filter(inc => {
-    const matchesSearch = 
-      inc.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inc.theftType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inc.victimName?.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = toUpperCaseAccentFree(searchTerm);
+    let searchInItems = false;
+    if (Array.isArray(inc.stolenItems)) {
+      searchInItems = inc.stolenItems.some(s =>
+        toUpperCaseAccentFree(typeof s === 'string' ? s : (s as any).description || '').includes(term)
+      );
+    }
+    
+    // Convert the entire incident to a string (excluding large fields like photos) for an exhaustive search pool, OR manually check all string fields.
+    // Let's manually check all relevant fields to be clean.
+    const allText = [
+      inc.address,
+      inc.theftType,
+      inc.victimName,
+      inc.victimPhone,
+      inc.witnessName,
+      inc.witnessPhone,
+      inc.area,
+      inc.notes,
+      inc.modusOperandi,
+      inc.creatorName,
+      inc.suspectNames,
+      inc.perpetratorDescription,
+      inc.vehicle,
+      inc.plateNumber,
+      inc.linkedIncidents,
+      inc.carCategory
+    ].map(s => s ? toUpperCaseAccentFree(String(s)) : '').join(' ');
+
+    const matchesSearch = !term || allText.includes(term) || searchInItems;
     
     const matchesArea = filterAreas.length === 0 || filterAreas.includes(inc.area);
     const matchesType = filterTypes.length === 0 || filterTypes.includes(inc.theftType);
@@ -127,8 +190,9 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
 
     return matchesSearch && matchesArea && matchesType && matchesDate && matchesMO;
   }).sort((a, b) => {
-    const timeA = a.recordedAt?.seconds || 0;
-    const timeB = b.recordedAt?.seconds || 0;
+    // Treat missing recordedAt as "just now" for sorting purposes
+    const timeA = a.recordedAt?.toMillis ? a.recordedAt.toMillis() : (a.recordedAt?.seconds ? a.recordedAt.seconds * 1000 : Date.now());
+    const timeB = b.recordedAt?.toMillis ? b.recordedAt.toMillis() : (b.recordedAt?.seconds ? b.recordedAt.seconds * 1000 : Date.now());
     return timeB - timeA;
   });
 
@@ -158,17 +222,19 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
             />
           </div>
           <div className="grid grid-cols-2 lg:flex lg:flex-row gap-3 shrink-0">
-            <select 
-              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-xs text-slate-700 text-ellipsis overflow-hidden whitespace-nowrap lg:w-40 h-[42px]"
-              value={dateFilterMode}
-              onChange={(e) => setDateFilterMode(e.target.value)}
-            >
-              <option value="All">{toUpperCaseAccentFree('ΧΡΟΝΟΣ')}</option>
-              <option value="Last7">{toUpperCaseAccentFree('ΤΕΛΕΥΤΑΙΑ ΕΒΔΟΜΑΔΑ')}</option>
-              <option value="Last30">{toUpperCaseAccentFree('ΤΕΛΕΥΤΑΙΟΣ ΜΗΝΑΣ')}</option>
-              <option value="CurrentYear">{toUpperCaseAccentFree('ΤΡΕΧΟΝ ΕΤΟΣ')}</option>
-              <option value="Custom">{toUpperCaseAccentFree('ΕΠΙΛΟΓΗ ΔΙΑΣΤΗΜΑΤΟΣ')}</option>
-            </select>
+            <SingleSelect
+              label="ΧΡΟΝΟΣ"
+              options={[
+                { label: 'ΧΡΟΝΟΣ', value: 'All' },
+                { label: 'ΤΕΛΕΥΤΑΙΑ ΕΒΔΟΜΑΔΑ', value: 'Last7' },
+                { label: 'ΤΕΛΕΥΤΑΙΟΣ ΜΗΝΑΣ', value: 'Last30' },
+                { label: 'ΤΡΕΧΟΝ ΕΤΟΣ', value: 'CurrentYear' },
+                { label: 'ΕΠΙΛΟΓΗ ΔΙΑΣΤΗΜΑΤΟΣ', value: 'Custom' },
+              ]}
+              selected={dateFilterMode}
+              onChange={setDateFilterMode}
+              className="w-full lg:w-40 h-[42px]"
+            />
             <MultiSelect 
               label="ΠΕΡΙΟΧΗ"
               options={areaOptions}
@@ -190,6 +256,16 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
               onChange={setFilterMOs}
               className="w-full lg:w-48 h-[42px]"
             />
+            {(searchTerm || filterAreas.length > 0 || filterTypes.length > 0 || filterMOs.length > 0 || dateFilterMode !== 'All') && (
+               <button
+                 onClick={handleClearFilters}
+                 className="col-span-2 lg:col-auto h-[42px] px-4 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                 title="Εκκαθάριση Φίλτρων"
+               >
+                 <X className="w-5 h-5 lg:mr-0 mr-2" />
+                 <span className="lg:hidden text-xs font-bold uppercase">ΕΚΚΑΘΑΡΙΣΗ ΦΙΛΤΡΩΝ</span>
+               </button>
+            )}
           </div>
         </div>
         
@@ -252,7 +328,7 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
       {/* Grid */}
       <div className={viewMode === 'detailed' ? "grid grid-cols-1 md:grid-cols-2 gap-6" : "grid grid-cols-1 gap-3"}>
         <AnimatePresence>
-          {filteredIncidents.map((incident) => (
+          {filteredIncidents.slice(0, displayLimit).map((incident) => (
             <motion.div
               layout
               key={incident.id}
@@ -266,23 +342,7 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
                     ? "rounded-2xl p-5 sm:p-6 hover:shadow-xl hover:shadow-black/10 hover:-translate-y-1.5" 
                     : "rounded-xl p-2.5 sm:p-3 hover:shadow-md hover:-translate-y-1";
                   
-                  switch (incident.theftType) {
-                    case 'Οικίας':
-                    case 'Οικία (Κύρια)':
-                    case 'Οικία (Εξοχική)':
-                      return `bg-slate-50/70 border-slate-100 ${baseStyle}`;
-                    case 'Επιχείρησης':
-                    case 'Επιχείρηση':
-                      return `bg-[#FFFDE7]/50 border-[#FFF59D]/50 ${baseStyle}`; // Nano Banana
-                    case 'Κλοπή από όχημα':
-                    case 'Από όχημα':
-                      return `bg-blue-50/30 border-blue-100/50 ${baseStyle}`;
-                    case 'Κλοπή οχήματος':
-                    case 'Κλοπή Αυτοκινήτου':
-                      return `bg-indigo-50/30 border-indigo-100/50 ${baseStyle}`;
-                    default:
-                      return `bg-white border-slate-100 ${baseStyle}`;
-                  }
+                  return `${TYPE_COLORS[incident.theftType] || 'bg-white border-slate-100'} ${baseStyle}`;
                 })()
               }`}
             >
@@ -293,11 +353,14 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
                       <div className={`${viewMode === 'detailed' ? 'p-3.5 rounded-2xl' : 'p-2 rounded-xl'} shrink-0 flex items-center justify-center ${incident.status === 'Τετελεσμένη' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
                         {(() => {
                           const iconClass = viewMode === 'detailed' ? "w-6 h-6" : "w-4 h-4";
-                          switch (incident.theftType) {
+                          const smallIconClass = viewMode === 'detailed' ? "w-4 h-4" : "w-3 h-3";
+                          switch (incident.theftType as string) {
                             case 'Οικίας':
                             case 'Οικία (Κύρια)':
-                            case 'Οικία (Εξοχική)':
                               return <Home className={iconClass} />;
+                            case 'Εξοχικό':
+                            case 'Οικία (Εξοχική)':
+                              return <TreePalm className={iconClass} />;
                             case 'Επιχείρησης':
                             case 'Επιχείρηση':
                               return <Store className={iconClass} />;
@@ -307,6 +370,8 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
                             case 'Κλοπή οχήματος':
                             case 'Κλοπή Αυτοκινήτου':
                               return <Car className={iconClass} />;
+                            case 'Ληστεία':
+                              return <Crosshair className={iconClass} />;
                             default:
                               return incident.status === 'Τετελεσμένη' ? <AlertTriangle className={iconClass} /> : <Plus className={iconClass} />;
                           }
@@ -390,7 +455,7 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
 
                 {viewMode === 'detailed' && incident.notes && (
                   <div className="mt-4 pt-4 border-t border-slate-100">
-                    <p className="text-[13px] text-slate-500 line-clamp-2 leading-relaxed italic">
+                    <p className="text-[13px] text-slate-500 line-clamp-2 leading-relaxed italic break-all">
                       "{incident.notes}"
                     </p>
                   </div>
@@ -422,6 +487,17 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
         <div className="flex flex-col items-center justify-center py-24 text-slate-300 gap-6">
           <Search className="w-16 h-16 opacity-30" />
           <p className="font-bold uppercase tracking-widest text-xs">{toUpperCaseAccentFree('ΔΕΝ ΒΡΕΘΗΚΑΝ ΑΠΟΤΕΛΕΣΜΑΤΑ')}</p>
+        </div>
+      )}
+
+      {filteredIncidents.length > displayLimit && (
+        <div className="flex justify-center mt-8 pb-8">
+          <button
+            onClick={() => setDisplayLimit(prev => prev + 5)}
+            className="bg-white hover:bg-slate-50 text-[#1A237E] font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-xl border border-slate-200 transition-all shadow-sm hover:shadow-md"
+          >
+            ΕΜΦΑΝΙΣΗ ΠΕΡΙΣΣΟΤΕΡΩΝ (5)
+          </button>
         </div>
       )}
     </div>

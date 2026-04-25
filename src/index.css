@@ -45,3 +45,22 @@ html, body, #root {
   background: #f8fafc !important;
   border-radius: 24px;
 }
+
+.incident-popup .leaflet-popup-content-wrapper {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background-color: transparent;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.incident-popup .leaflet-popup-content {
+  margin: 0 !important;
+  width: 100% !important;
+  min-width: 240px;
+}
+
+.incident-popup .leaflet-popup-tip {
+  background-color: #ffffff;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+}

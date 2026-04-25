@@ -5,16 +5,15 @@
 
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, onSnapshot, orderBy, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { auth, googleProvider, db } from './firebase';
-import { List, Map as MapIcon, Plus, LogOut, Search, Filter, Bell, Settings, Users } from 'lucide-react';
+import { List, Map as MapIcon, Plus, LogOut, Search, Filter, Settings, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast, Toaster } from 'react-hot-toast';
 import IncidentList from './components/IncidentList';
 import IncidentForm from './components/IncidentForm';
 import IncidentMap from './components/IncidentMap';
 import OfficerProfileForm from './components/OfficerProfileForm';
-import SettingsModal from './components/SettingsModal';
 import UsersModal from './components/UsersModal';
 import AppLogo from './components/AppLogo';
 import { toUpperCaseAccentFree } from './lib/Typography';
@@ -32,7 +31,6 @@ export default function App() {
   
   const [view, setView] = useState<'list' | 'map' | 'form'>('list');
   const [editingIncident, setEditingIncident] = useState<any>(null);
-  const [showSettings, setShowSettings] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
 
   const handleOpenIncident = async (id: string) => {
@@ -49,6 +47,10 @@ export default function App() {
       toast.error(`Σφάλμα κατά την ανάκτηση: ${error?.message || 'Άγνωστο σφάλμα'}`);
     }
   };
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [view, editingIncident]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -85,7 +87,8 @@ export default function App() {
     
     const q = query(
       collection(db, 'incidents'),
-      orderBy('recordedAt', 'desc')
+      orderBy('recordedAt', 'desc'),
+      limit(150)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -101,69 +104,7 @@ export default function App() {
     return unsubscribe;
   }, [userProfile]);
 
-  useEffect(() => {
-    if (!userProfile || !userProfile.notificationPrefs?.enabled) return;
 
-    const prefs = userProfile.notificationPrefs;
-
-    const now = Timestamp.now();
-    const q = query(
-      collection(db, 'incidents'),
-      where('recordedAt', '>=', now)
-    );
-
-    const checkQuietHours = (): boolean => {
-      if (!prefs.quietHours?.enabled) return false;
-      const { start, end } = prefs.quietHours;
-      if (!start || !end) return false;
-      
-      const currentTime = new Date();
-      const currentHours = currentTime.getHours();
-      const currentMinutes = currentTime.getMinutes();
-      
-      const [startHours, startMinutes] = start.split(':').map(Number);
-      const [endHours, endMinutes] = end.split(':').map(Number);
-      
-      const timeInMinutes = currentHours * 60 + currentMinutes;
-      const startInMinutes = startHours * 60 + startMinutes;
-      const endInMinutes = endHours * 60 + endMinutes;
-      
-      if (startInMinutes < endInMinutes) {
-        // e.g. 08:00 to 18:00
-        return timeInMinutes >= startInMinutes && timeInMinutes <= endInMinutes;
-      } else {
-        // e.g. 22:00 to 06:00 (crosses midnight)
-        return timeInMinutes >= startInMinutes || timeInMinutes <= endInMinutes;
-      }
-    };
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const data = change.doc.data() as Incident;
-          if (data.createdBy === userProfile.uid) return;
-
-          // Don't notify if we are in quiet hours
-          if (checkQuietHours()) return;
-
-          toast(
-            (t) => (
-              <div className="flex flex-col">
-                <div className="font-bold uppercase tracking-widest text-[#1A237E] flex items-center gap-2">
-                  <Bell className="w-4 h-4" />
-                  ΝΕΟ ΣΥΜΒΑΝ
-                </div>
-                <div className="text-sm mt-1">{data.area} - {data.theftType}</div>
-              </div>
-            ),
-            { duration: 6000, position: 'top-right' }
-          );
-        }
-      });
-    });
-
-    return () => unsub();
-  }, [userProfile]);
 
   const handleLogin = async () => {
     try {
@@ -252,16 +193,6 @@ export default function App() {
                 >
                   <Users className="w-5 h-5" />
                 </button>
-                <button 
-                  onClick={() => setShowSettings(true)}
-                  className="relative p-2 sm:p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10"
-                  title="Ρυθμίσεις Ειδοποιήσεων"
-                >
-                  <Bell className="w-5 h-5" />
-                  {userProfile.notificationPrefs?.enabled && (
-                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#D4AF37] rounded-full animate-pulse border-2 border-[#1A237E]" />
-                  )}
-                </button>
               </>
             )}
             <button 
@@ -292,13 +223,6 @@ export default function App() {
           )}
           {showUsersModal && (
             <UsersModal onClose={() => setShowUsersModal(false)} />
-          )}
-          {showSettings && userProfile && (
-            <SettingsModal 
-              userProfile={userProfile} 
-              onClose={() => setShowSettings(false)}
-              onUpdate={setUserProfile} 
-            />
           )}
           {userProfile && userProfile.isApproved !== false && view === 'list' && (
             <motion.div 
@@ -358,6 +282,7 @@ export default function App() {
                     setView('list');
                   }
                   setEditingIncident(null);
+                  window.scrollTo({ top: 0, behavior: 'instant' });
                 }} 
                 onOpenIncident={handleOpenIncident}
               />

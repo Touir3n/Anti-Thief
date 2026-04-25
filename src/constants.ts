@@ -19,7 +19,7 @@ export const AREAS = {
   'ΔΗΜΟΤΙΚΗ ΕΝΟΤΗΤΑ ΑΡΕΘΟΥΣΑΣ': ['Αρέθουσα', 'Λευκούδα', 'Μαυρούδα', 'Σκεπαστό', 'Λίμνη', 'Στεφανινά', 'Φιλαδέλφιο', 'Ανοιξιά', 'Ξηροπόταμος']
 };
 
-export const THEFT_TYPES = ['Οικίας', 'Επιχείρησης', 'Κλοπή από όχημα', 'Κλοπή οχήματος'] as const;
+export const THEFT_TYPES = ['Οικίας', 'Εξοχικό', 'Επιχείρησης', 'Κλοπή από όχημα', 'Κλοπή οχήματος', 'Ληστεία'] as const;
 
 export const MO_HOUSE = [
   'Παραβίαση κύριας θύρας', 
@@ -40,20 +40,30 @@ export const MO_VEHICLE = [
   'Κλοπή από ανασφάλιστο όχημα'
 ];
 
+export const MO_ROBBERY = [
+  'Με χρήση σωματικής βίας',
+  'Με απειλή σοβαρού κινδύνου (χρήση όπλου κλπ)',
+  'Αιφνιδιασμός (αρπαγή)'
+];
+
 export const STOLEN_ITEMS = ['Ηλεκτρονικά', 'Κοσμήματα', 'Μετρητά', 'Εργαλεία', 'Άλλο'];
 export const CAR_CATEGORIES = ['Ι.Χ.Ε.', 'ΔΙΚΥΚΛΟ', 'ΦΟΡΤΗΓΑΚΙ (ΑΓΡΟΤΙΚΟ)', 'ΤΡΑΚΤΕΡ', 'ΑΛΛΟ'];
 
 export const TYPE_COLORS: Record<string, string> = {
-  'Οικίας': 'bg-blue-50 border-blue-200 text-blue-800',
-  'Επιχείρησης': 'bg-[#FFFDE7] border-[#FFF59D] text-[#827717]',
-  'Κλοπή από όχημα': 'bg-slate-100 border-slate-200 text-slate-700',
-  'Κλοπή οχήματος': 'bg-indigo-50 border-indigo-200 text-indigo-800'
+  'Οικίας': 'bg-emerald-50 border-emerald-200 border-l-emerald-500 border-l-[6px] text-emerald-900',
+  'Εξοχικό': 'bg-yellow-50 border-yellow-200 border-l-yellow-500 border-l-[6px] text-yellow-900',
+  'Επιχείρησης': 'bg-orange-50 border-orange-200 border-l-orange-500 border-l-[6px] text-orange-900',
+  'Κλοπή από όχημα': 'bg-indigo-50 border-indigo-200 border-l-indigo-500 border-l-[6px] text-indigo-900',
+  'Κλοπή οχήματος': 'bg-cyan-50 border-cyan-200 border-l-cyan-500 border-l-[6px] text-cyan-900',
+  'Ληστεία': 'bg-red-50 border-red-300 border-l-red-600 border-l-[6px] text-red-950 font-bold'
 };
 
 export const TYPE_BADGE_COLORS: Record<string, string> = {
-  'Οικίας': 'bg-blue-100 text-blue-800 border-blue-300',
-  'Επιχείρησης': 'bg-[#FFF9C4] text-[#827717] border-[#FFF59D]',
-  'Κλοπή από όχημα': 'bg-slate-200 text-slate-800 border-slate-300',
-  'Κλοπή οχήματος': 'bg-indigo-100 text-indigo-800 border-indigo-300'
+  'Οικίας': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  'Εξοχικό': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  'Επιχείρησης': 'bg-orange-100 text-orange-800 border-orange-300',
+  'Κλοπή από όχημα': 'bg-indigo-100 text-indigo-800 border-indigo-300',
+  'Κλοπή οχήματος': 'bg-cyan-100 text-cyan-800 border-cyan-300',
+  'Ληστεία': 'bg-red-100 text-red-900 border-red-400 font-bold'
 };
 
