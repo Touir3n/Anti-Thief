@@ -54,17 +54,55 @@ service cloud.firestore {
              (data.get('linkedIncidents', null) == null || (data.linkedIncidents is string && data.linkedIncidents.size() <= 2000));
     }
 
+    function isApprovedUser() {
+      let isExplicitlyAdmin = (request.auth.token.email != null && request.auth.token.email.lower() == 'panagiotidispaul@gmail.com');
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let hasTrueFlag = userDoc != null && userDoc.data.get('isApproved', false) == true;
+      let hasAdminFlag = userDoc != null && userDoc.data.get('isAdmin', false) == true;
+      return isExplicitlyAdmin || hasTrueFlag || hasAdminFlag;
+    }
+
+    function isAdmin() {
+      let isExplicitlyAdmin = (request.auth.token.email != null && request.auth.token.email.lower() == 'panagiotidispaul@gmail.com');
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let hasAdminFlag = userDoc != null && userDoc.data.get('isAdmin', false) == true;
+      return isExplicitlyAdmin || hasAdminFlag;
+    }
+
+    function isSuperAdmin() {
+      return (request.auth.token.email != null && request.auth.token.email.lower() == 'panagiotidispaul@gmail.com');
+    }
+
     match /users/{userId} {
-      allow list: if isSignedIn();
-      allow get: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == userId;
+      allow list: if isSignedIn() && isApprovedUser();
+      allow get: if isSignedIn() && (request.auth.uid == userId || isApprovedUser());
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && (
+          (incoming().get('isAdmin', false) == existing().get('isAdmin', false) &&
+           incoming().get('isApproved', false) == existing().get('isApproved', false)) ||
+          isSuperAdmin()
+        )) ||
+        (isAdmin() && (
+          isSuperAdmin() ||
+          (existing().get('isAdmin', false) == false && 
+           (incoming().get('isAdmin', false) == false || incoming().get('isAdmin', false) == true))
+        ))
+      );
+      allow delete: if false;
     }
 
     match /incidents/{incidentId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && incoming().createdBy == request.auth.uid;
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      allow read: if isSignedIn() && isApprovedUser();
+      allow create: if isSignedIn() && isApprovedUser() && incoming().createdBy == request.auth.uid;
+      allow update: if isSignedIn() && isApprovedUser();
+      allow delete: if isSignedIn() && isApprovedUser() && (resource.data.createdBy == request.auth.uid || isAdmin());
+    }
+    match /deleted_incidents/{incidentId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSignedIn() && isApprovedUser() && (incoming().createdBy == request.auth.uid || isAdmin());
+      allow update: if false;
+      allow delete: if isSuperAdmin();
     }
   }
 }

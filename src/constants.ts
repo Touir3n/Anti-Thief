@@ -19,7 +19,7 @@ export const AREAS = {
   'ΔΗΜΟΤΙΚΗ ΕΝΟΤΗΤΑ ΑΡΕΘΟΥΣΑΣ': ['Αρέθουσα', 'Λευκούδα', 'Μαυρούδα', 'Σκεπαστό', 'Λίμνη', 'Στεφανινά', 'Φιλαδέλφιο', 'Ανοιξιά', 'Ξηροπόταμος']
 };
 
-export const THEFT_TYPES = ['Οικίας', 'Εξοχικό', 'Επιχείρησης', 'Κλοπή από όχημα', 'Κλοπή οχήματος', 'Ληστεία'] as const;
+export const THEFT_TYPES = ['Οικίας', 'Εξοχικό', 'Επιχείρησης', 'Αποθήκη', 'Κλοπή από όχημα', 'Κλοπή οχήματος', 'Ληστεία', 'Κλοπή σε βάρος πεζού', 'Λοιπές'] as const;
 
 export const MO_HOUSE = [
   'Παραβίαση κύριας θύρας', 
@@ -46,16 +46,29 @@ export const MO_ROBBERY = [
   'Αιφνιδιασμός (αρπαγή)'
 ];
 
-export const STOLEN_ITEMS = ['Ηλεκτρονικά', 'Κοσμήματα', 'Μετρητά', 'Εργαλεία', 'Άλλο'];
+export const MO_PEDESTRIAN = [
+  'Με εναγκαλισμό',
+  'Εξαιτίας συνωστισμού',
+  'Άλλη μέθοδος'
+];
+
+export const MO_OTHER = [
+  ...new Set([...MO_HOUSE, ...MO_VEHICLE, ...MO_ROBBERY, ...MO_PEDESTRIAN])
+];
+
+export const STOLEN_ITEMS = ['Ηλεκτρονικά', 'Κοσμήματα', 'Μετρητά', 'Εργαλεία', 'Έγγραφα', 'Ένδυση', 'Όπλα', 'Εμπορεύματα', 'Άλλο'];
 export const CAR_CATEGORIES = ['Ι.Χ.Ε.', 'ΔΙΚΥΚΛΟ', 'ΦΟΡΤΗΓΑΚΙ (ΑΓΡΟΤΙΚΟ)', 'ΤΡΑΚΤΕΡ', 'ΑΛΛΟ'];
 
 export const TYPE_COLORS: Record<string, string> = {
   'Οικίας': 'bg-emerald-50 border-emerald-200 border-l-emerald-500 border-l-[6px] text-emerald-900',
   'Εξοχικό': 'bg-yellow-50 border-yellow-200 border-l-yellow-500 border-l-[6px] text-yellow-900',
   'Επιχείρησης': 'bg-orange-50 border-orange-200 border-l-orange-500 border-l-[6px] text-orange-900',
+  'Αποθήκη': 'bg-stone-50 border-stone-200 border-l-stone-500 border-l-[6px] text-stone-900',
   'Κλοπή από όχημα': 'bg-indigo-50 border-indigo-200 border-l-indigo-500 border-l-[6px] text-indigo-900',
   'Κλοπή οχήματος': 'bg-cyan-50 border-cyan-200 border-l-cyan-500 border-l-[6px] text-cyan-900',
-  'Ληστεία': 'bg-red-50 border-red-300 border-l-red-600 border-l-[6px] text-red-950 font-bold'
+  'Ληστεία': 'bg-red-50 border-red-300 border-l-red-600 border-l-[6px] text-red-950 font-bold',
+  'Κλοπή σε βάρος πεζού': 'bg-fuchsia-50 border-fuchsia-200 border-l-fuchsia-500 border-l-[6px] text-fuchsia-900',
+  'Λοιπές': 'bg-slate-50 border-slate-200 border-l-slate-400 border-l-[6px] text-slate-800'
 };
 
 export const TYPE_BADGE_COLORS: Record<string, string> = {

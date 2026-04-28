@@ -58,7 +58,7 @@ export const LinkedIncidentTag: React.FC<LinkedIncidentTagProps> = ({ id, onOpen
             })()}
           </span>
           <span className="text-[10px] opacity-80">
-            {toUpperCaseAccentFree(data.area)} • {data.isTimeRange ? `${new Date(data.incidentDateFrom).toLocaleDateString('el-GR')} - ${new Date(data.incidentDateTo).toLocaleDateString('el-GR')}` : (data.incidentDate ? new Date(data.incidentDate).toLocaleDateString('el-GR') : '')} • {data.creatorRank} {data.creatorName}
+            {toUpperCaseAccentFree(data.area)} • {data.isTimeRange ? `${new Date(data.incidentDateFrom).toLocaleDateString('el-GR')} - ${new Date(data.incidentDateTo).toLocaleDateString('el-GR')}` : (data.incidentDate ? new Date(data.incidentDate).toLocaleDateString('el-GR') : '')} • {data.creatorRank} {toUpperCaseAccentFree(data.creatorName)}
           </span>
         </div>
       ) : (

@@ -1,8 +1,8 @@
 export type Area = string;
 export type Status = 'Τετελεσμένη' | 'Απόπειρα';
 export type Rank = 'Αστυνόμος Β΄' | 'Υπαστυνόμος Α΄' | 'Υπαστυνόμος Β΄' | 'Ανθυπαστυνόμος' | 'Αρχιφύλακας' | 'Αστυφύλακας';
-export type TheftType = 'Οικίας' | 'Εξοχικό' | 'Επιχείρησης' | 'Κλοπή από όχημα' | 'Κλοπή οχήματος' | 'Ληστεία';
-export type StolenItem = 'Ηλεκτρονικά' | 'Κοσμήματα' | 'Μετρητά' | 'Εργαλεία' | 'Άλλο';
+export type TheftType = 'Οικίας' | 'Εξοχικό' | 'Επιχείρησης' | 'Αποθήκη' | 'Κλοπή από όχημα' | 'Κλοπή οχήματος' | 'Ληστεία' | 'Κλοπή σε βάρος πεζού' | 'Λοιπές';
+export type StolenItem = 'Ηλεκτρονικά' | 'Κοσμήματα' | 'Μετρητά' | 'Εργαλεία' | 'Έγγραφα' | 'Ένδυση' | 'Όπλα' | 'Εμπορεύματα' | 'Άλλο';
 export type SuspectStatus = 'Άγνωστοι' | 'Γνωστοί';
 export type ModusOperandi = string;
 
@@ -32,6 +32,8 @@ export interface Incident {
   modusOperandi?: ModusOperandi;
   carCategory?: string; // e.g. Ι.Χ.Ε., ΔΙΚΥΚΛΟ, etc.
   stolenItems: StolenItem[];
+  stolenValue?: string;
+  hasTheftInsurance?: boolean;
   suspectDetails: SuspectStatus;
   suspectNames?: string;
   perpetratorDescription: string;
@@ -70,6 +72,7 @@ export interface UserProfile {
   firstName: string;
   email?: string;
   isApproved?: boolean;
+  isAdmin?: boolean;
   notificationPrefs?: {
     enabled: boolean;
     quietHours?: {

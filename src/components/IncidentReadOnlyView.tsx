@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Search, User as UserIcon, Camera, Image as ImageIcon, Link2, MapPin, Calendar, Home, Store, CarFront, Car, Umbrella, Crosshair } from 'lucide-react';
+import { Shield, Search, User as UserIcon, Camera, Image as ImageIcon, Link2, MapPin, Calendar, Home, Store, CarFront, Car, Umbrella, Crosshair, PersonStanding, Warehouse } from 'lucide-react';
 import { Incident } from '../types';
 import { toUpperCaseAccentFree } from '../lib/Typography';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
@@ -61,6 +61,10 @@ export default function IncidentReadOnlyView({ incident, setFullscreenImage, onO
                           return <><Car className="w-4 h-4 text-slate-400" /> {toUpperCaseAccentFree(incident.theftType)}</>;
                         case 'Ληστεία':
                           return <><Crosshair className="w-4 h-4 text-slate-400" /> {toUpperCaseAccentFree(incident.theftType)}</>;
+                        case 'Κλοπή σε βάρος πεζού':
+                          return <><PersonStanding className="w-4 h-4 text-slate-400" /> {toUpperCaseAccentFree(incident.theftType)}</>;
+                        case 'Αποθήκη':
+                          return <><Warehouse className="w-4 h-4 text-slate-400" /> {toUpperCaseAccentFree(incident.theftType)}</>;
                         default: return toUpperCaseAccentFree(incident.theftType);
                       }
                     })()}
@@ -117,6 +121,18 @@ export default function IncidentReadOnlyView({ incident, setFullscreenImage, onO
                       </span>
                     ))}
                   </div>
+                </div>
+              )}
+              {incident.stolenValue && (
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Αξία Κλοπιμαίων</div>
+                  <div className="font-medium text-slate-700">{incident.stolenValue}</div>
+                </div>
+              )}
+              {incident.hasTheftInsurance && (
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Ασφάλεια Κλοπής</div>
+                  <div className="font-medium text-slate-700">ΝΑΙ, ΥΠΑΡΧΕΙ ΑΣΦΑΛΙΣΤΗΡΙΟ</div>
                 </div>
               )}
               <div>

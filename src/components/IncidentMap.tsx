@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { collection, query, onSnapshot, where } from 'firebase/firestore';
@@ -7,12 +7,12 @@ import { db, auth } from '../firebase';
 import { Incident } from '../types';
 import { format, subWeeks, subMonths, subYears, isAfter } from 'date-fns';
 import { el } from 'date-fns/locale';
-import { Filter, Calendar, Home, Store, CarFront, Car, ChevronDown, ChevronUp, X, TreePalm } from 'lucide-react';
+import { Filter, Calendar, Home, Store, CarFront, Car, ChevronDown, ChevronUp, X, TreePalm, Link2 } from 'lucide-react';
 import { toUpperCaseAccentFree } from '../lib/Typography';
 import { toast } from 'react-hot-toast';
 import MultiSelect from './MultiSelect';
 import SingleSelect from './SingleSelect';
-import { AREAS, THEFT_TYPES, MO_HOUSE, MO_VEHICLE, MO_ROBBERY, TYPE_COLORS } from '../constants';
+import { AREAS, THEFT_TYPES, MO_HOUSE, MO_VEHICLE, MO_ROBBERY, MO_PEDESTRIAN, MO_OTHER, TYPE_COLORS } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Fix for Leaflet marker icons in React
@@ -92,6 +92,24 @@ const blackIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
+const greenIcon = new L.Icon({
+  ...DefaultIcon.options,
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const orangeIcon = new L.Icon({
+  ...DefaultIcon.options,
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
 function MapResizer() {
   const map = useMap();
   useEffect(() => {
@@ -127,7 +145,6 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
   
   const [customStart, setCustomStart] = useState(() => getInitialState('map_customStart', ''));
   const [customEnd, setCustomEnd] = useState(() => getInitialState('map_customEnd', ''));
-  const [showRelatedOnly, setShowRelatedOnly] = useState(() => getInitialState('map_showRelatedOnly', false));
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(() => getInitialState('map_isFiltersExpanded', true));
 
   const [expandedPopupId, setExpandedPopupId] = useState<string | null>(null);
@@ -141,9 +158,8 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
     sessionStorage.setItem('map_filterMOs', JSON.stringify(filterMOs));
     sessionStorage.setItem('map_customStart', JSON.stringify(customStart));
     sessionStorage.setItem('map_customEnd', JSON.stringify(customEnd));
-    sessionStorage.setItem('map_showRelatedOnly', JSON.stringify(showRelatedOnly));
     sessionStorage.setItem('map_isFiltersExpanded', JSON.stringify(isFiltersExpanded));
-  }, [timeRange, filterTypes, filterAreas, filterMOs, customStart, customEnd, showRelatedOnly, isFiltersExpanded]);
+  }, [timeRange, filterTypes, filterAreas, filterMOs, customStart, customEnd, isFiltersExpanded]);
 
   const handleClearFilters = () => {
     setTimeRange('month');
@@ -152,7 +168,6 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
     setFilterMOs([]);
     setCustomStart('');
     setCustomEnd('');
-    setShowRelatedOnly(false);
     setFocusedIncidentId(null);
   };
 
@@ -165,15 +180,34 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
     return Array.from(areas).sort((a,b) => a.localeCompare(b, 'el'));
   }, [incidents]);
 
+  const recordedTypes = useMemo(() => {
+    const types = new Set<string>();
+    incidents.forEach(inc => {
+      if (inc.theftType) {
+        const mappedType = 
+          ((inc.theftType as string) === 'Οικία (Κύρια)') ? 'Οικίας' :
+          ((inc.theftType as string) === 'Οικία (Εξοχική)') ? 'Εξοχικό' :
+          ((inc.theftType as string) === 'Επιχείρηση') ? 'Επιχείρησης' :
+          ((inc.theftType as string) === 'Από όχημα') ? 'Κλοπή από όχημα' :
+          ((inc.theftType as string) === 'Κλοπή Αυτοκινήτου') ? 'Κλοπή οχήματος' : inc.theftType;
+        types.add(mappedType as string);
+      }
+    });
+    return Array.from(types).sort((a,b) => a.localeCompare(b, 'el')).map(t => ({ label: t, value: t }));
+  }, [incidents]);
+
   const areaOptions = useMemo(() => {
     let options: {label: string, value: string, isGroup?: boolean, indent?: boolean}[] = [];
     const validUnknown: string[] = [];
     
     Object.entries(AREAS).forEach(([muni, villages]) => {
-      options.push({ label: muni, value: muni, isGroup: true });
-      villages.forEach(v => {
-        options.push({ label: v, value: v, indent: true });
-      });
+      const activeVillages = villages.filter(v => recordedAreas.includes(v));
+      if (activeVillages.length > 0) {
+        options.push({ label: muni, value: muni, isGroup: true });
+        activeVillages.forEach(v => {
+          options.push({ label: v, value: v, indent: true });
+        });
+      }
     });
 
     recordedAreas.forEach(a => {
@@ -194,43 +228,27 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
   }, [recordedAreas]);
 
   const moOptions = useMemo(() => {
-    const types = filterTypes.length > 0 ? filterTypes : THEFT_TYPES;
-    let options: {label: string, value: string}[] = [];
-    
-    const hasHouse = types.includes('Οικίας') || types.includes('Εξοχικό') || types.includes('Επιχείρησης');
-    const hasVehicle = types.includes('Κλοπή από όχημα') || types.includes('Κλοπή οχήματος');
-    const hasRobbery = types.includes('Ληστεία');
-    
-    if (hasHouse) {
-      MO_HOUSE.forEach(mo => options.push({ label: mo, value: mo }));
-    }
-    if (hasVehicle) {
-      MO_VEHICLE.forEach(mo => {
-        if (!options.some(o => o.value === mo)) options.push({ label: mo, value: mo });
-      });
-    }
-    if (hasRobbery) {
-      MO_ROBBERY.forEach(mo => {
-        if (!options.some(o => o.value === mo)) options.push({ label: mo, value: mo });
-      });
-    }
-    
-    // add any custom MOs from data
-    const customMOs = new Set<string>();
+    // Only show MOs that actually exist in the DB (for the currently selected types, or all if no type selected)
+    const activeMOs = new Set<string>();
     incidents.forEach(inc => {
-      if (inc.modusOperandi && !options.some(o => o.value === inc.modusOperandi)) {
-        customMOs.add(inc.modusOperandi);
+      if (inc.modusOperandi && typeof inc.modusOperandi === 'string') {
+        const mappedType = 
+          ((inc.theftType as string) === 'Οικία (Κύρια)') ? 'Οικίας' :
+          ((inc.theftType as string) === 'Οικία (Εξοχική)') ? 'Εξοχικό' :
+          ((inc.theftType as string) === 'Επιχείρηση') ? 'Επιχείρησης' :
+          ((inc.theftType as string) === 'Από όχημα') ? 'Κλοπή από όχημα' :
+          ((inc.theftType as string) === 'Κλοπή Αυτοκινήτου') ? 'Κλοπή οχήματος' : inc.theftType;
+
+        if (filterTypes.length === 0 || filterTypes.includes(mappedType as string)) {
+          activeMOs.add(inc.modusOperandi);
+        }
       }
     });
-    
-    if (customMOs.size > 0 && options.length > 0) {
-      // separator-like item isn't strictly needed without isGroup, but we can add
-    }
-    
-    Array.from(customMOs).forEach(mo => {
-      options.push({ label: mo, value: mo });
-    });
-    
+
+    let options: {label: string, value: string}[] = Array.from(activeMOs)
+      .sort((a,b) => a.localeCompare(b, 'el'))
+      .map(mo => ({ label: mo, value: mo }));
+      
     return options;
   }, [filterTypes, incidents]);
 
@@ -244,6 +262,45 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
       }
     }
   }, [moOptions, filterMOs]);
+
+  // Use incidents to build a global symmetric graph first
+  const graph = useMemo(() => {
+    const g: Record<string, Set<string>> = {};
+    incidents.forEach(inc => {
+      if (!g[inc.id]) g[inc.id] = new Set();
+      const links = (inc.linkedIncidents || '').split(',').map(s=>s.trim()).filter(s=>s.length>0);
+      links.forEach(link => {
+        g[inc.id].add(link);
+        if (!g[link]) g[link] = new Set();
+        g[link].add(inc.id);
+      });
+    });
+    return g;
+  }, [incidents]);
+
+  const relatedIncidentsMap = useMemo(() => {
+    const map: Record<string, Incident[]> = {};
+    const incidentMap = new Map(incidents.map(inc => [inc.id, inc]));
+    incidents.forEach(incident => {
+      const visited = new Set<string>();
+      const stack = [incident.id];
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        if (!visited.has(current)) {
+          visited.add(current);
+          const neighbors = graph[current] || new Set();
+          for (const neighbor of neighbors) {
+            if (!visited.has(neighbor)) {
+              stack.push(neighbor);
+            }
+          }
+        }
+      }
+      visited.delete(incident.id);
+      map[incident.id] = Array.from(visited).map(id => incidentMap.get(id)).filter((inc): inc is Incident => inc !== undefined);
+    });
+    return map;
+  }, [incidents, graph]);
 
   const filteredIncidents = useMemo(() => {
     const now = new Date();
@@ -306,29 +363,19 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
       
       if (!matchesDate) return false;
 
-      // 5. Related Only Filter
-      if (showRelatedOnly) {
-         if (!incident.linkedIncidents || incident.linkedIncidents.trim().length === 0) return false;
-      }
-
       return true;
     });
 
     if (focusedIncidentId) {
-      const g: Record<string, string[]> = {};
-      incidents.forEach(inc => {
-         g[inc.id] = (inc.linkedIncidents || '').split(',').map(s=>s.trim()).filter(s=>s.length>0);
-      });
-      
       const visited = new Set<string>();
       const stack = [focusedIncidentId];
       while (stack.length > 0) {
         const current = stack.pop()!;
         if (!visited.has(current)) {
           visited.add(current);
-          const neighbors = g[current] || [];
+          const neighbors = graph[current] || new Set();
           for (const neighbor of neighbors) {
-            if (g[neighbor] && !visited.has(neighbor)) {
+            if (!visited.has(neighbor)) {
               stack.push(neighbor);
             }
           }
@@ -338,7 +385,7 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
     }
 
     return baseFiltered;
-  }, [incidents, timeRange, filterTypes, filterAreas, filterMOs, customStart, customEnd, showRelatedOnly, focusedIncidentId]);
+  }, [incidents, graph, timeRange, filterTypes, filterAreas, filterMOs, customStart, customEnd, focusedIncidentId]);
 
   useEffect(() => {
     if (mapRef.current) {
@@ -358,86 +405,8 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
         }
       }
     }
-  }, [timeRange, filterTypes, filterAreas, filterMOs, customStart, customEnd, showRelatedOnly, focusedIncidentId]);
+  }, [timeRange, filterTypes, filterAreas, filterMOs, customStart, customEnd, focusedIncidentId]);
 
-  const graph = useMemo(() => {
-    const g: Record<string, string[]> = {};
-    incidents.forEach(inc => {
-       g[inc.id] = (inc.linkedIncidents || '').split(',').map(s=>s.trim()).filter(s=>s.length>0);
-    });
-    return g;
-  }, [incidents]);
-
-  const getRelatedIncidents = (incidentId: string) => {
-    const visited = new Set<string>();
-    const stack = [incidentId];
-    while (stack.length > 0) {
-      const current = stack.pop()!;
-      if (!visited.has(current)) {
-        visited.add(current);
-        const neighbors = graph[current] || [];
-        for (const neighbor of neighbors) {
-          if (graph[neighbor] && !visited.has(neighbor)) {
-            stack.push(neighbor);
-          }
-        }
-      }
-    }
-    visited.delete(incidentId); // Remove self
-    return incidents.filter(inc => visited.has(inc.id));
-  };
-
-  const markerColors = useMemo(() => {
-    if (!showRelatedOnly) return {};
-
-    const graph: Record<string, string[]> = {};
-    filteredIncidents.forEach(inc => {
-       graph[inc.id] = (inc.linkedIncidents || '').split(',').map(s=>s.trim()).filter(s=>s.length>0);
-    });
-
-    const colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080'];
-    
-    // DFS to find components
-    const visited = new Set<string>();
-    const components: string[][] = [];
-
-    for (const inc of filteredIncidents) {
-      if (!visited.has(inc.id)) {
-        const component: string[] = [];
-        const stack = [inc.id];
-        while (stack.length > 0) {
-          const current = stack.pop()!;
-          if (!visited.has(current)) {
-            visited.add(current);
-            component.push(current);
-            const neighbors = graph[current] || [];
-            for (const neighbor of neighbors) {
-              // only follow links to other visible incidents
-              if (graph[neighbor] && !visited.has(neighbor)) {
-                stack.push(neighbor);
-              }
-            }
-          }
-        }
-        if (component.length > 1) {
-          components.push(component);
-        } else if (component.length === 1) { // standalone in this view
-          components.push(component);
-        }
-      }
-    }
-
-    // Sort to give consistent colors
-    components.sort((a,b) => b.length - a.length);
-
-    const res: Record<string, string> = {};
-    components.forEach((comp, idx) => {
-       const color = colors[idx % colors.length];
-       comp.forEach(id => res[id] = color);
-    });
-
-    return res;
-  }, [filteredIncidents, showRelatedOnly]);
 
   return (
     <div className="w-full h-full flex flex-col flex-1 relative group bg-slate-50 min-h-[60vh]">
@@ -492,7 +461,7 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
                 <div className="col-span-1 lg:col-auto lg:flex-1">
                   <MultiSelect 
                     label="ΕΙΔΟΣ"
-                    options={THEFT_TYPES.map(t => ({ label: t, value: t }))}
+                    options={recordedTypes}
                     selected={filterTypes}
                     onChange={setFilterTypes}
                     className="w-full h-[34px]"
@@ -509,7 +478,7 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
                 </div>
                 
                 {/* Clear Filters / Active Series Indicator */}
-                <div className="col-span-2 lg:col-auto flex items-center gap-2 h-[34px] lg:w-auto shrink-0 justify-end">
+                <div className="col-span-2 lg:col-auto flex flex-wrap items-center gap-2 min-h-[34px] lg:w-auto shrink-0 justify-end">
                   {focusedIncidentId && (
                     <div className="flex-1 flex items-center justify-between px-2 h-full bg-blue-50 text-blue-700 rounded-lg border border-blue-200">
                       <span className="text-[9px] sm:text-[10px] font-bold whitespace-nowrap leading-none mt-0.5">{toUpperCaseAccentFree('ΕΝΕΡΓΗ ΣΕΙΡΑ')}</span>
@@ -604,32 +573,34 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
             case 'Ληστεία':
               customIcon = redIcon;
               break;
+            case 'Κλοπή σε βάρος πεζού':
+              customIcon = orangeIcon;
+              break;
+            case 'Αποθήκη':
+              customIcon = greenIcon;
+              break;
+            case 'Λοιπές':
+              customIcon = blackIcon;
+              break;
+            default:
+              customIcon = blackIcon;
+              break;
           }
           
-          if (showRelatedOnly && markerColors[incident.id]) {
-            const hex = markerColors[incident.id];
-            customIcon = L.divIcon({
-              className: 'custom-color-marker',
-              html: `<div style="background-color: ${hex}; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
-              iconSize: [18, 18],
-              iconAnchor: [9, 9]
-            });
-          }
-
-          const relatedIncidents = getRelatedIncidents(incident.id);
+          const relatedIncidents = relatedIncidentsMap[incident.id] || [];
 
           return incident.location && (
-            <Marker 
-              key={incident.id} 
-              ref={(r) => { if (r) markerRefs.current[incident.id] = r; }}
-              position={[incident.location.lat, incident.location.lng]}
-              icon={customIcon}
-              eventHandlers={{
-                click: () => {
-                   setExpandedPopupId(null);
-                }
-              }}
-            >
+            <div key={incident.id}>
+              <Marker 
+                ref={(r) => { if (r) markerRefs.current[incident.id] = r; }}
+                position={[incident.location.lat, incident.location.lng]}
+                icon={customIcon}
+                eventHandlers={{
+                  click: () => {
+                     setExpandedPopupId(null);
+                  }
+                }}
+              >
               <Popup className="incident-popup min-w-[240px]">
                 <div className={`p-4 ${TYPE_COLORS[incident.theftType as string] || 'bg-white'} shadow-sm`}>
                   <div className="flex items-center justify-between mb-2">
@@ -649,8 +620,26 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
                         }
                       </span>
                       {incident.modusOperandi && (
-                        <span className="text-xs text-slate-400 block mt-0.5">
+                        <span className="text-xs text-slate-500 block mt-0.5">
                           M.O.: {toUpperCaseAccentFree(incident.modusOperandi)}
+                        </span>
+                      )}
+                      
+                      {incident.stolenItems && incident.stolenItems.length > 0 && (
+                        <span className="text-[11px] text-slate-600 block mt-1.5 font-bold">
+                          ΚΛΟΠΙΜΑΙΑ: {toUpperCaseAccentFree(incident.stolenItems.join(', '))}
+                        </span>
+                      )}
+                      
+                      {incident.stolenValue && (
+                        <span className="text-[11px] text-slate-600 block mt-0.5">
+                          ΑΞΙΑ: <span className="font-bold">{toUpperCaseAccentFree(incident.stolenValue)}</span>
+                        </span>
+                      )}
+                      
+                      {incident.hasTheftInsurance && (
+                        <span className="text-[10px] text-blue-700 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded-md inline-block mt-1.5 uppercase font-bold tracking-wider">
+                          ΑΣΦΑΛΙΣΤΗΡΙΟ ΚΛΟΠΗΣ
                         </span>
                       )}
                     </p>
@@ -684,8 +673,9 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
                          <div className="flex flex-col gap-1.5 max-h-[120px] overflow-y-auto custom-scrollbar p-1">
                            {relatedIncidents.map(rel => (
                               <div key={rel.id} onClick={(e) => { 
-                                e.stopPropagation(); 
-                                if (rel.location && mapRef.current) {
+                                e.stopPropagation();
+                                const isVisible = filteredIncidents.some(fi => fi.id === rel.id);
+                                if (isVisible && rel.location && mapRef.current) {
                                   mapRef.current.flyTo([rel.location.lat, rel.location.lng], 15);
                                   setTimeout(() => {
                                     if (markerRefs.current[rel.id]) {
@@ -693,7 +683,7 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
                                     }
                                   }, 500);
                                 } else {
-                                  // Fallback to old behavior if no location or map
+                                  // Fallback if not visible due to filters or missing location
                                   onEdit(rel);
                                 }
                               }} className="bg-white/90 border border-slate-200/60 p-2 rounded-lg cursor-pointer hover:bg-white hover:border-blue-300 transition-colors">
@@ -717,8 +707,9 @@ export default function IncidentMap({ onEdit, incidents }: IncidentMapProps) {
                 </div>
               </Popup>
             </Marker>
-          );
-        })}
+          </div>
+        );
+      })}
       </MapContainer>
     </div>
   );

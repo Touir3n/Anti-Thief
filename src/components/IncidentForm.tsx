@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { db, auth, storage, handleFirestoreError } from '../firebase';
 import { doc, setDoc, updateDoc, serverTimestamp, getDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Incident, Area, Status, TheftType, StolenItem, SuspectStatus, ModusOperandi, UserProfile } from '../types';
-import { X, Check, MapPin, Camera, AlertTriangle, ShieldCheck, User as UserIcon, Phone, Clock, FileText, Loader2, Lock, Unlock, Trash2, AlertCircle, Home, Store, CarFront, Car, TreePalm, Crosshair } from 'lucide-react';
+import { X, Check, MapPin, Camera, AlertTriangle, ShieldCheck, User as UserIcon, Phone, Clock, FileText, Loader2, Lock, Unlock, Trash2, AlertCircle, Home, Store, CarFront, Car, TreePalm, Crosshair, Image as ImageIcon, Warehouse, PersonStanding, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 import { toUpperCaseAccentFree } from '../lib/Typography';
@@ -22,16 +22,19 @@ import LinkedIncidentSearchModal from './LinkedIncidentSearchModal';
 import IncidentReadOnlyView from './IncidentReadOnlyView';
 import ManualMapSelection from './ManualMapSelection';
 import { LinkedIncidentTag } from './LinkedIncidentTag';
-import { PREDEFINED_AREAS, AREAS, MO_HOUSE, MO_VEHICLE, MO_ROBBERY, THEFT_TYPES, STOLEN_ITEMS, CAR_CATEGORIES } from '../constants';
+import { PREDEFINED_AREAS, AREAS, MO_HOUSE, MO_VEHICLE, MO_ROBBERY, MO_PEDESTRIAN, MO_OTHER, THEFT_TYPES, STOLEN_ITEMS, CAR_CATEGORIES } from '../constants';
 
 const STATUSES: Status[] = ['Τετελεσμένη', 'Απόπειρα'];
-const THEFT_ICONS = {
+const THEFT_ICONS: Record<string, React.ReactElement> = {
   'Οικίας': <Home className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
   'Εξοχικό': <TreePalm className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
   'Επιχείρησης': <Store className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
+  'Αποθήκη': <Warehouse className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
   'Κλοπή από όχημα': <CarFront className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
   'Κλοπή οχήματος': <Car className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
-  'Ληστεία': <Crosshair className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />
+  'Ληστεία': <Crosshair className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
+  'Κλοπή σε βάρος πεζού': <PersonStanding className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />,
+  'Λοιπές': <HelpCircle className="w-5 h-5 mb-1 text-slate-500 group-hover:text-[#1A237E]" />
 };
 
 export default function IncidentForm({ incident, userProfile, onClose, onOpenIncident, allIncidents }: IncidentFormProps) {
@@ -53,10 +56,35 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
 
+  const formRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Force scroll to top on every step change
+    const scrollToTop = () => {
+      if (formRef.current) {
+        formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // Use a slightly longer delay to ensure the new content is rendered and layout has stabilized
+    const timer = setTimeout(scrollToTop, 100);
+    return () => clearTimeout(timer);
+  }, [currentStep]);
+
+  const canDelete = incident && (incident.createdBy === auth.currentUser?.uid || userProfile?.isAdmin || auth.currentUser?.email?.toLowerCase() === 'panagiotidispaul@gmail.com');
+  
   const handleDelete = async () => {
     if (!incident) return;
     setIsDeleting(true);
     try {
+      const deletedIncidentRef = doc(db, 'deleted_incidents', incident.id);
+      await setDoc(deletedIncidentRef, {
+        ...incident,
+        deletedAt: serverTimestamp(),
+        deletedBy: auth.currentUser?.uid,
+        deletedByEmail: auth.currentUser?.email
+      });
       await deleteDoc(doc(db, 'incidents', incident.id));
       toast.success(toUpperCaseAccentFree('ΤΟ ΣΥΜΒΑΝ ΔΙΑΓΡΑΦΗΚΕ ΕΠΙΤΥΧΩΣ'));
       onClose();
@@ -139,8 +167,10 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
     incidentDateFrom: new Date().toISOString().slice(0, 16),
     incidentDateTo: new Date().toISOString().slice(0, 16),
     stolenItems: [],
+    stolenValue: '',
     hasAlarm: false,
     hasCameras: false,
+    hasTheftInsurance: false,
     forensicsCalled: false,
     suspectDetails: 'Άγνωστοι',
     location: { lat: 40.6644, lng: 23.6967 } // Default Volvi Area (Stavros)
@@ -399,7 +429,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
   };
 
   return (
-    <div className="bg-white border sm:border-slate-200 rounded-[24px] sm:rounded-[32px] overflow-hidden shadow-xl sm:shadow-2xl mb-24 sm:mb-32 relative">
+    <div ref={formRef} className="bg-white border sm:border-slate-200 rounded-[24px] sm:rounded-[32px] overflow-hidden shadow-xl sm:shadow-2xl mb-24 sm:mb-32 relative">
       {/* Header */}
       <div className="bg-[#1A237E] p-6 sm:p-8 flex items-center justify-between">
         <div className="flex items-center gap-3 sm:gap-4 text-white">
@@ -418,7 +448,14 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             {incident && (
               <span className="text-[11px] sm:text-xs font-bold text-blue-200 uppercase tracking-widest block mt-1.5 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5" />
-                ΚΑΤΑΧΩΡΗΘΗΚΕ: {incident.recordedAt ? new Date(incident.recordedAt).toLocaleDateString('el-GR') : ''}
+                ΚΑΤΑΧΩΡΗΘΗΚΕ: {(() => {
+                  if (!incident.recordedAt) return '';
+                  if (incident.recordedAt?.toDate) return incident.recordedAt.toDate().toLocaleString('el-GR');
+                  if (incident.recordedAt?.seconds) return new Date(incident.recordedAt.seconds * 1000).toLocaleString('el-GR');
+                  const d = new Date(incident.recordedAt);
+                  if (!isNaN(d.getTime())) return d.toLocaleString('el-GR');
+                  return String(incident.recordedAt);
+                })()}
               </span>
             )}
           </div>
@@ -445,8 +482,14 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
         <div className="bg-amber-50 border-b border-amber-100 p-3 sm:px-8 text-amber-900 text-[10px] sm:text-xs flex flex-col gap-1">
           {(incident.creatorName || incident.createdBy) && (
             <div>
-              <span className="font-bold">Δημιουργήθηκε από:</span> {incident.creatorName || incident.createdBy} {incident.creatorRank ? `(${incident.creatorRank})` : ''}
-              {incident.recordedAt && ` - ${incident.recordedAt?.toDate ? incident.recordedAt.toDate().toLocaleString('el-GR') : (incident.recordedAt?.seconds ? new Date(incident.recordedAt.seconds * 1000).toLocaleString('el-GR') : '')}`}
+              <span className="font-bold">Δημιουργήθηκε από:</span> {toUpperCaseAccentFree(incident.creatorName) || incident.createdBy} {incident.creatorRank ? `(${incident.creatorRank})` : ''}
+              {incident.recordedAt && ` - ${(() => {
+                  if (incident.recordedAt?.toDate) return incident.recordedAt.toDate().toLocaleString('el-GR');
+                  if (incident.recordedAt?.seconds) return new Date(incident.recordedAt.seconds * 1000).toLocaleString('el-GR');
+                  const d = new Date(incident.recordedAt);
+                  if (!isNaN(d.getTime())) return d.toLocaleString('el-GR');
+                  return String(incident.recordedAt);
+              })()}`}
             </div>
           )}
           {incident.editHistory && incident.editHistory.length > 0 && (
@@ -455,7 +498,13 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
               <ul className="list-disc list-inside mt-1 space-y-1 ml-1 opacity-80">
                 {incident.editHistory.map((edit, idx) => (
                   <li key={idx}>
-                    {edit.updatedByRank ? ` ${edit.updatedByRank} ` : ''}{edit.updatedByName || edit.updatedBy} - {edit.updatedAt?.toDate ? edit.updatedAt.toDate().toLocaleString('el-GR') : (edit.updatedAt?.seconds ? new Date(edit.updatedAt.seconds * 1000).toLocaleString('el-GR') : '')}
+                    {edit.updatedByRank ? ` ${edit.updatedByRank} ` : ''}{edit.updatedByName || edit.updatedBy} - {(() => {
+                        if (edit.updatedAt?.toDate) return edit.updatedAt.toDate().toLocaleString('el-GR');
+                        if (edit.updatedAt?.seconds) return new Date(edit.updatedAt.seconds * 1000).toLocaleString('el-GR');
+                        const d = new Date(edit.updatedAt as any);
+                        if (!isNaN(d.getTime())) return d.toLocaleString('el-GR');
+                        return String(edit.updatedAt);
+                    })()}
                   </li>
                 ))}
               </ul>
@@ -769,7 +818,13 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
                   onChange={(e) => handleChange('modusOperandi', e.target.value)}
                 >
                   <option value="" disabled>Επιλέξτε τρόπο...</option>
-                  {(formData.theftType === 'Ληστεία' ? MO_ROBBERY : (formData.theftType === 'Κλοπή από όχημα' ? MO_VEHICLE : MO_HOUSE)).map(mo => (
+                  {(
+                    formData.theftType === 'Ληστεία' ? MO_ROBBERY : 
+                    formData.theftType === 'Κλοπή από όχημα' || formData.theftType === 'Κλοπή οχήματος' ? MO_VEHICLE : 
+                    formData.theftType === 'Κλοπή σε βάρος πεζού' ? MO_PEDESTRIAN :
+                    formData.theftType === 'Λοιπές' ? MO_OTHER :
+                    MO_HOUSE
+                  ).map(mo => (
                     <option key={mo} value={mo}>{toUpperCaseAccentFree(mo)}</option>
                   ))}
                 </select>
@@ -795,7 +850,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
                 placeholder="ΑΒΓ-1234"
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-bold text-base uppercase tracking-widest"
                 value={formData.plateNumber || ''}
-                onChange={(e) => handleChange('plateNumber', e.target.value?.toUpperCase())}
+                onChange={(e) => handleChange('plateNumber', toUpperCaseAccentFree(e.target.value))}
               />
             </div>
           </div>
@@ -820,21 +875,37 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
                 ))}
               </div>
             )}
+
+
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('ΚΛΟΠΙΜΑΙΑ')}</label>
-            <div className="flex flex-wrap gap-2 sm:gap-3">
-              {STOLEN_ITEMS.map(item => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => handleToggleStolen(item as StolenItem)}
-                  className={`py-2 px-4 sm:py-3 sm:px-6 rounded-full border text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition-all ${formData.stolenItems?.includes(item) ? 'bg-[#1A237E]/10 border-[#1A237E] text-[#1A237E]' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
-                >
-                  {toUpperCaseAccentFree(item)}
-                </button>
-              ))}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('ΚΛΟΠΙΜΑΙΑ')}</label>
+              <div className="flex flex-wrap gap-2 sm:gap-3">
+                {STOLEN_ITEMS.map(item => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => handleToggleStolen(item as StolenItem)}
+                    className={`py-2 px-4 sm:py-3 sm:px-6 rounded-full border text-[10px] sm:text-[11px] font-black uppercase tracking-widest transition-all ${formData.stolenItems?.includes(item as StolenItem) ? 'bg-[#1A237E]/10 border-[#1A237E] text-[#1A237E]' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
+                  >
+                    {toUpperCaseAccentFree(item)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-wider text-slate-400 font-black ml-1">{toUpperCaseAccentFree('ΑΞΙΑ ΑΦΑΙΡΕΘΕΝΤΩΝ')}</label>
+              <input
+                type="text"
+                value={formData.stolenValue || ''}
+                readOnly={isReadOnly}
+                onChange={e => handleChange('stolenValue', e.target.value)}
+                placeholder="π.χ. 1500€, Απροσδιόριστη"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1A237E] focus:border-transparent text-sm font-medium transition-all"
+              />
             </div>
           </div>
 
@@ -842,7 +913,8 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             {[ 
               { key: 'hasAlarm', label: 'Συναγερμός' },
               { key: 'hasCameras', label: 'Συστήματα CCTV' },
-              { key: 'forensicsCalled', label: 'Κλήθηκε ΥΕΕΒΕ' }
+              { key: 'forensicsCalled', label: 'Κλήθηκε ΥΕΕΒΕ' },
+              { key: 'hasTheftInsurance', label: 'ΑΣΦΑΛΙΣΤΗΡΙΟ ΚΛΟΠΗΣ' }
             ].map(item => (
               <label key={item.key} className="flex items-center gap-3 sm:gap-4 cursor-pointer group p-3 sm:p-4 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200 hover:border-[#1A237E]/50 transition-all">
                 <div 
@@ -953,16 +1025,29 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
                     )}
                   </>
                 ) : (
-                  <>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={(e) => handleFileChange(e, photoKey)} 
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50" 
-                    />
-                    <Camera className="w-10 h-10 transition-transform group-hover:scale-110 pointer-events-none" />
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em] pointer-events-none">{toUpperCaseAccentFree(`ΛΗΨΗ ΦΩΤΟΓΡΑΦΙΑΣ ${index + 1}`)}</span>
-                  </>
+                  <div className="flex w-full h-full divide-x-2 divide-dashed divide-slate-200">
+                    <label className="flex-1 flex flex-col items-center justify-center gap-2 hover:bg-[#1A237E]/5 cursor-pointer relative group/cam transition-colors">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        capture="environment"
+                        onChange={(e) => handleFileChange(e, photoKey)} 
+                        className="hidden" 
+                      />
+                      <Camera className="w-8 h-8 text-slate-300 group-hover/cam:text-[#1A237E] transition-colors" />
+                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover/cam:text-[#1A237E] text-center w-full truncate px-1">ΚΑΜΕΡΑ</span>
+                    </label>
+                    <label className="flex-1 flex flex-col items-center justify-center gap-2 hover:bg-[#1A237E]/5 cursor-pointer relative group/gal transition-colors">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => handleFileChange(e, photoKey)} 
+                        className="hidden" 
+                      />
+                      <ImageIcon className="w-8 h-8 text-slate-300 group-hover/gal:text-[#1A237E] transition-colors" />
+                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover/gal:text-[#1A237E] text-center w-full truncate px-1">ΣΥΛΛΟΓΗ</span>
+                    </label>
+                  </div>
                 )}
               </div>
             ))}
@@ -1028,7 +1113,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
             )}
           </div>
           
-          {incident && (
+          {canDelete && (
             <div className="flex flex-col sm:flex-row justify-center mt-2 border-t border-slate-100 pt-6">
               <div className="flex items-center gap-2 justify-center w-full sm:w-auto">
                 <button 
@@ -1063,7 +1148,7 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {deleteStep > 0 && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-white/90 backdrop-blur-sm rounded-[24px] sm:rounded-[32px]">
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1131,7 +1216,8 @@ export default function IncidentForm({ incident, userProfile, onClose, onOpenInc
       <AnimatePresence>
         {showLinkedModal && (
           <LinkedIncidentSearchModal
-            allIncidents={allIncidents}
+            allIncidents={allIncidents?.filter(inc => inc.id !== incident?.id)}
+            currentIncidentId={incident?.id}
             onClose={() => setShowLinkedModal(false)}
             onSelect={(id) => {
               const current = formData.linkedIncidents ? formData.linkedIncidents.split(',').map(s => s.trim()).filter(s => s.length > 0) : [];

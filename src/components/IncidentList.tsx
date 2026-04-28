@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError } from '../firebase';
 import { Incident } from '../types';
-import { Search, Filter, Calendar, MapPin, ChevronRight, AlertTriangle, CheckCircle, Plus, Trash2, AlertCircle, X, LayoutGrid, LayoutList, Clock, Home, Store, CarFront, Car, Camera, TreePalm, Crosshair } from 'lucide-react';
+import { Search, Filter, Calendar, MapPin, ChevronRight, AlertTriangle, CheckCircle, Plus, Trash2, AlertCircle, X, LayoutGrid, LayoutList, Clock, Home, Store, CarFront, Car, Camera, TreePalm, Crosshair, PersonStanding, Warehouse, HelpCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { el } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
@@ -10,7 +10,7 @@ import { toUpperCaseAccentFree } from '../lib/Typography';
 import { toast } from 'react-hot-toast';
 import SingleSelect from './SingleSelect';
 import MultiSelect from './MultiSelect';
-import { MUNICIPALITIES, THEFT_TYPES, MO_HOUSE, MO_VEHICLE, MO_ROBBERY, TYPE_COLORS, TYPE_BADGE_COLORS } from '../constants';
+import { MUNICIPALITIES, THEFT_TYPES, MO_HOUSE, MO_VEHICLE, MO_ROBBERY, MO_PEDESTRIAN, MO_OTHER, TYPE_COLORS, TYPE_BADGE_COLORS } from '../constants';
 
 interface IncidentListProps {
   onEdit: (incident: Incident) => void;
@@ -99,9 +99,11 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
     
     let options: {label: string, value: string}[] = [];
     
-    const hasHouse = types.includes('Οικίας') || types.includes('Εξοχικό') || types.includes('Επιχείρησης');
+    const hasHouse = types.includes('Οικίας') || types.includes('Εξοχικό') || types.includes('Επιχείρησης') || types.includes('Αποθήκη');
     const hasVehicle = types.includes('Κλοπή από όχημα') || types.includes('Κλοπή οχήματος');
     const hasRobbery = types.includes('Ληστεία');
+    const hasPedestrian = types.includes('Κλοπή σε βάρος πεζού');
+    const hasOther = types.includes('Λοιπές');
     
     if (hasHouse) {
       MO_HOUSE.forEach(mo => options.push({ label: mo, value: mo }));
@@ -111,6 +113,12 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
     }
     if (hasRobbery) {
       MO_ROBBERY.forEach(mo => options.push({ label: mo, value: mo }));
+    }
+    if (hasPedestrian) {
+      MO_PEDESTRIAN.forEach(mo => options.push({ label: mo, value: mo }));
+    }
+    if (hasOther) {
+      MO_OTHER.forEach(mo => options.push({ label: mo, value: mo }));
     }
     
     return options;
@@ -215,8 +223,8 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
             <input 
               type="text" 
-              placeholder="Αναζήτηση διεύθυνσης, είδους, παθόντα, τηλεφώνου, αστυνομικού..."
-              className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-12 pr-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-medium text-slate-900"
+              placeholder="Αναζήτηση με διεύθυνση, παθόντα, είδος..."
+              className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-12 pr-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-medium text-slate-900 placeholder:text-slate-400"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -372,6 +380,12 @@ export default function IncidentList({ onEdit, incidents, loading }: IncidentLis
                               return <Car className={iconClass} />;
                             case 'Ληστεία':
                               return <Crosshair className={iconClass} />;
+                            case 'Κλοπή σε βάρος πεζού':
+                              return <PersonStanding className={iconClass} />;
+                            case 'Αποθήκη':
+                              return <Warehouse className={iconClass} />;
+                            case 'Λοιπές':
+                              return <HelpCircle className={iconClass} />;
                             default:
                               return incident.status === 'Τετελεσμένη' ? <AlertTriangle className={iconClass} /> : <Plus className={iconClass} />;
                           }

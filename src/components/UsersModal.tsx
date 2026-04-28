@@ -34,11 +34,19 @@ export default function UsersModal({ onClose }: UsersModalProps) {
   }, []);
 
   const toggleApproval = async (uid: string, currentStatus: boolean) => {
-    // Only handle approve
-    if (currentStatus) return;
     try {
       await updateDoc(doc(db, 'users', uid), {
-        isApproved: true
+        isApproved: !currentStatus
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const toggleAdmin = async (uid: string, currentIsAdmin: boolean) => {
+    try {
+      await updateDoc(doc(db, 'users', uid), {
+        isAdmin: !currentIsAdmin
       });
     } catch (err) {
       console.error(err);
@@ -70,40 +78,70 @@ export default function UsersModal({ onClose }: UsersModalProps) {
           ) : (
             <div className="flex flex-col gap-2.5">
               {users.map(u => {
-                const approved = u.isApproved !== false;
                 const isSelf = u.uid === auth.currentUser?.uid;
+                const userEmail = u.email || (isSelf ? auth.currentUser?.email : '');
+                const targetIsAdmin = userEmail?.toLowerCase() === 'panagiotidispaul@gmail.com' || u.isAdmin === true;
+                const targetIsSuperAdmin = userEmail?.toLowerCase() === 'panagiotidispaul@gmail.com';
+                const currentUserIsSuperAdmin = auth.currentUser?.email?.toLowerCase() === 'panagiotidispaul@gmail.com';
+                const approved = u.isApproved === true || targetIsAdmin;
+                const canToggleAdmin = !isSelf && !targetIsSuperAdmin && approved && (currentUserIsSuperAdmin || !u.isAdmin);
 
                 return (
                   <div key={u.uid} className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col gap-3 shadow-sm relative overflow-hidden group">
-                    <div className="flex justify-between items-start gap-4">
-                       <div className="flex items-center gap-2">
-                         <h4 className="font-bold text-slate-800 text-[13px] leading-tight">
-                           {u.rank} {u.lastName} {u.firstName}
+                    <div className="flex justify-between items-center gap-2">
+                       <div className="flex flex-wrap items-center gap-2 min-w-0">
+                         <h4 className="font-bold text-slate-800 text-[13px] leading-snug truncate">
+                           {u.rank} {toUpperCaseAccentFree(u.lastName)} {toUpperCaseAccentFree(u.firstName)}
                          </h4>
+                         {isSelf && (
+                           <span className="bg-blue-50 text-blue-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-blue-100 shrink-0">
+                             EΓΩ
+                           </span>
+                         )}
+                         {targetIsAdmin && (
+                           <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-amber-200 shrink-0">
+                             ADMIN
+                           </span>
+                         )}
                        </div>
                        
-                       {isSelf && (
-                         <span className="bg-blue-50 text-blue-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-blue-100 shrink-0">
-                           EΓΩ
-                         </span>
-                       )}
+                       <div className="flex flex-col gap-1 shrink-0">
+                         {!isSelf && (
+                           <button 
+                             onClick={() => toggleApproval(u.uid, approved)}
+                             className={`px-2 py-1 rounded w-auto flex items-center justify-center min-w-[70px] text-[9px] font-bold transition-all border shadow-sm ${
+                               approved 
+                                 ? "bg-transparent border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600" 
+                                 : "bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
+                             }`}
+                             title={approved ? "Αφαίρεση πρόσβασης" : "Έγκριση πρόσβασης"}
+                             disabled={targetIsAdmin && !currentUserIsSuperAdmin}
+                           >
+                             {approved ? "ΑΦΑΙΡΕΣΗ" : "ΕΓΚΡΙΣΗ"}
+                           </button>
+                         )}
+                         {canToggleAdmin && (
+                           <button 
+                             onClick={() => toggleAdmin(u.uid, u.isAdmin || false)}
+                             className={`px-2 py-1 rounded w-auto flex items-center justify-center min-w-[70px] text-[9px] font-bold transition-all border shadow-sm ${
+                               u.isAdmin 
+                                 ? "bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200" 
+                                 : "bg-amber-100 border-amber-300 text-amber-700 hover:bg-amber-200"
+                             }`}
+                             title={u.isAdmin ? "Αφαίρεση admin" : "Κάνε admin"}
+                           >
+                             {u.isAdmin ? "- ADMIN" : "+ ADMIN"}
+                           </button>
+                         )}
+                       </div>
                     </div>
                 
                     {!approved && (
-                      <div className="mt-1 flex items-center gap-2">
+                      <div className="flex items-center gap-2 mt-2">
                         <span className="bg-orange-50 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase flex items-center gap-1 border border-orange-100">
                           <XCircle className="w-3 h-3" /> Εκκρεμεί έγκριση
                         </span>
                       </div>
-                    )}
-                    
-                    {!isSelf && !approved && (
-                      <button 
-                        onClick={() => toggleApproval(u.uid, approved)}
-                        className="w-full mt-1 px-4 py-2 rounded-xl text-[11px] font-bold transition-all bg-blue-600 border border-blue-600 text-white hover:bg-blue-700 shadow-sm"
-                      >
-                        ΕΓΚΡΙΣΗ ΠΡΟΣΒΑΣΗΣ
-                      </button>
                     )}
                   </div>
                 );

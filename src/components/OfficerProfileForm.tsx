@@ -28,11 +28,14 @@ export default function OfficerProfileForm({ onComplete }: OfficerProfileFormPro
 
     setLoading(true);
     try {
+      const isAdmin = auth.currentUser.email?.toLowerCase() === 'panagiotidispaul@gmail.com';
       const profile: UserProfile = {
         uid: auth.currentUser.uid,
         rank: formData.rank,
-        lastName: formData.lastName.toUpperCase(),
-        firstName: formData.firstName.toUpperCase()
+        lastName: toUpperCaseAccentFree(formData.lastName),
+        firstName: toUpperCaseAccentFree(formData.firstName),
+        email: auth.currentUser.email || undefined,
+        isApproved: isAdmin
       };
 
       await setDoc(doc(db, 'users', auth.currentUser.uid), profile);

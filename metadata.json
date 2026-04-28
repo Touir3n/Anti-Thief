@@ -1,5 +1,5 @@
 {
-  "name": "Anti-Thief System",
+  "name": "ANTI-THIEF",
   "description": "Μια εφαρμογή για την καταγραφή και διαχείριση περιστατικών κλοπών, με υποστήριξη GPS, φωτογραφιών και αναζήτησης.",
   "requestFramePermissions": [
     "geolocation",

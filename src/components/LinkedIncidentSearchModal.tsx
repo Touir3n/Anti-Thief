@@ -14,9 +14,10 @@ interface LinkedIncidentSearchModalProps {
   onSelect: (incidentId: string) => void;
   selectedIds: string[];
   allIncidents?: Incident[];
+  currentIncidentId?: string;
 }
 
-export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedIds, allIncidents }: LinkedIncidentSearchModalProps) {
+export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedIds, allIncidents, currentIncidentId }: LinkedIncidentSearchModalProps) {
   const [incidents, setIncidents] = useState<Incident[]>(allIncidents || []);
   const [loading, setLoading] = useState(!allIncidents);
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,7 +38,7 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
           limit(50)
         );
         const snapshot = await getDocs(q);
-        const fetched = snapshot.docs.map(doc => doc.data() as Incident);
+        const fetched = snapshot.docs.map(doc => doc.data() as Incident).filter(inc => inc.id !== currentIncidentId);
         setIncidents(fetched);
       } catch (err: any) {
         console.error('Σφάλμα κατά την αναζήτηση συμβάντων:', err);
@@ -55,7 +56,12 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
     return (
       inc.area.toLowerCase().includes(q) ||
       inc.theftType.toLowerCase().includes(q) ||
-      (inc.address?.toLowerCase() || '').includes(q)
+      (inc.address?.toLowerCase() || '').includes(q) ||
+      (inc.victimName?.toLowerCase() || '').includes(q) ||
+      (inc.notes?.toLowerCase() || '').includes(q) ||
+      (inc.perpetratorDescription?.toLowerCase() || '').includes(q) ||
+      (inc.vehicle?.toLowerCase() || '').includes(q) ||
+      (inc.plateNumber?.toLowerCase() || '').includes(q)
     );
   });
 
@@ -85,7 +91,7 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
             <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 transform -translate-y-1/2" />
             <input 
               type="text"
-              placeholder="Αναζήτηση με Περιοχή, Είδος Κλοπής..."
+              placeholder="Αναζήτηση (περιοχή, είδος...)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl pl-12 pr-4 py-4 outline-none focus:ring-4 focus:ring-[#1A237E]/5 focus:border-[#1A237E] transition-all text-slate-900 font-bold"
@@ -113,11 +119,6 @@ export default function LinkedIncidentSearchModal({ onClose, onSelect, selectedI
                 >
                   <div className="flex-1 min-w-0 pr-4">
                     <div className="flex items-center gap-3 mb-2">
-                      <span className={`text-[10px] sm:text-xs font-black uppercase tracking-widest px-2 sm:px-3 py-1 rounded-lg ${
-                        isSelected ? 'bg-blue-600 text-white' : 'bg-blue-900/10 text-blue-900'
-                      }`}>
-                        {incident.id?.split('-')[1] || incident.id}
-                      </span>
                       <span className={`text-xs sm:text-sm font-bold uppercase truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
                         {toUpperCaseAccentFree(incident.theftType)}
                       </span>
